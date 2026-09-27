@@ -263,8 +263,12 @@ class Detector:
         best_pos_w = None
         for w in ws:
             ft = feats[w]
-            pos = self.is_positive(ft, w)
             short = abs(w - self.window_s) > 1e-6
+            pos = self.is_positive(ft, w)
+            if short and self.activity:
+                # mouvement franc en cours (indice rapide) : une fenêtre courte
+                # n'a pas assez de recul pour séparer respiration et mouvement
+                pos = False
             if pos and ft.breath_hz is not None:
                 self._hz[w].append(ft.breath_hz)
             if pos:
