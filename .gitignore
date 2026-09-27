@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+
+# caches locaux (pip) — ne pas versionner
+.cache/pip/
+
+# sorties d'exécution
+IoT_radar_v2/logs/*.log
+IoT_radar_v2/ai/runs/
+*.c64

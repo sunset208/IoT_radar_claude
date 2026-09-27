@@ -26,6 +26,19 @@
       <div class="kpi"><span class="kv" id="k-mm">—</span><span class="kl">amplitude (mm)</span></div>
       <div class="kpi exp"><span class="kv" id="k-hr">—</span><span class="kl">cœur (exp.)</span></div>
     </div>
+    <div class="live">
+      <div class="gauge" id="g-pres">
+        <span class="gl">Présence <small>(0.12–1 Hz, 4 s)</small></span>
+        <div class="gbar"><div class="gfill"></div><div class="gthr"></div></div>
+        <span class="gv">—</span>
+      </div>
+      <div class="gauge" id="g-act">
+        <span class="gl">Activité <small>(1.5–15 Hz, 1 s)</small></span>
+        <div class="gbar"><div class="gfill"></div><div class="gthr"></div></div>
+        <span class="gv">—</span>
+      </div>
+      <div class="scales" id="scales"></div>
+    </div>
     <div class="truth" id="truth"></div>
   </section>
 
@@ -50,8 +63,28 @@
   </section>
 
   <section class="card wide">
-    <h2>Historique <span class="unit">(5 min — confiance, SNR, état)</span></h2>
+    <h2>Historique <span class="unit">(5 min — confiance, SNR, présence, état)</span></h2>
     <canvas id="c-hist"></canvas>
+  </section>
+
+  <section class="card wide" id="sfcw-card" hidden>
+    <h2>SFCW — distance × temps <span class="unit" id="sfcw-info"></span></h2>
+    <div class="sfcw-grid">
+      <canvas id="c-rt"></canvas>
+      <canvas id="c-prof"></canvas>
+    </div>
+    <canvas id="c-rbins" class="short"></canvas>
+  </section>
+
+  <section class="card" id="mr60-card" hidden>
+    <h2>Module 60 GHz <span class="unit" id="mr60-info"></span></h2>
+    <div class="kpis small">
+      <div class="kpi"><span class="kv" id="m-bpm">—</span><span class="kl">resp/min</span></div>
+      <div class="kpi"><span class="kv" id="m-hr">—</span><span class="kl">cœur/min</span></div>
+      <div class="kpi"><span class="kv" id="m-dist">—</span><span class="kl">distance (m)</span></div>
+      <div class="kpi"><span class="kv" id="m-pres">—</span><span class="kl">présence</span></div>
+    </div>
+    <canvas id="c-mr60" class="short"></canvas>
   </section>
 
   <section class="card">

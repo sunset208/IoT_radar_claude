@@ -1,16 +1,39 @@
 {
   "pfa_target_per_window": 0.01,
-  "n_windows": 262,
+  "h0_duration_s": 74.6,
+  "warning": "moins de 10 min de salle vide : seuils bornés par les valeurs par défaut (enregistrer plus de « vide » pour une vraie calibration)",
+  "scales_s": [
+    8.0,
+    12.0,
+    20.0
+  ],
+  "n_windows": 402,
   "n_neg": 110,
-  "n_pos": 152,
+  "n_pos": 292,
   "thresholds": {
-    "snr_threshold_db": 9.761031617042628,
-    "periodicity_threshold": 0.30073510389083224,
+    "snr_threshold_db": 10.11665556255934,
+    "periodicity_threshold": 0.35,
     "motion_threshold": 6.0
+  },
+  "scales": {
+    "8": {
+      "snr_threshold_db": 18.0,
+      "periodicity_threshold": 0.700007687943496,
+      "snr_h0_max": 16.692789314996766,
+      "n_neg": 134,
+      "pd_per_window": 0.020588235294117647
+    },
+    "12": {
+      "snr_threshold_db": 15.5,
+      "periodicity_threshold": 0.3741979648387621,
+      "snr_h0_max": 13.285846641417002,
+      "n_neg": 126,
+      "pd_per_window": 0.05555555555555555
+    }
   },
   "noise_ref_dbfs": -72.64956465554562,
   "motion_neg_percentiles": {
-    "50": 1.6717732625456574,
+    "50": 1.6717732625456576,
     "90": 1.7688114337157292,
     "99": 1.8279086670313491
   },
@@ -22,8 +45,29 @@
     "band_db",
     "linearity"
   ],
+  "fast": {
+    "clutter_amp_dbc": -84.68609363636467,
+    "clutter_phase_dbc": -65.34828576633332,
+    "clutter_phase_mrad_rms": 0.5402387249184039,
+    "presence_threshold_db": 6.0,
+    "activity_threshold_db": 8.0,
+    "presence_h0_percentiles": {
+      "50": 0.0,
+      "99": 2.552975899525064,
+      "99.9": 2.750299306313637
+    },
+    "activity_h0_percentiles": {
+      "50": 0.5550283608324831,
+      "99": 3.420079029075854,
+      "99.9": 3.8841271739464345
+    }
+  },
   "cv_auc_logistic": null,
-  "auc_snr_only": 0.9938397129186602,
-  "pd_per_window_snr_rule": 0.881578947368421,
-  "note": "Calibré le 27/09/2026 sur 1 session vide + 1 session respiration cadencée (1.8 GHz, antennes Pluto d'origine + RAM). Régression logistique retirée : 2 sessions ne suffisent pas (sur-apprentissage)."
+  "auc_snr_only": 0.9962951432129514,
+  "pd_per_window_snr_rule": 0.8664383561643836,
+  "n_sessions": {
+    "neg": 1,
+    "pos": 2
+  },
+  "note": "Recalibré le 27/09/2026 (v2.1 : multi-échelle + indices rapides) sur 1 session vide (75 s) + 2 sessions respiration (cadencée 15/min, spontanée ~20/min), 1.8 GHz, antennes Pluto d'origine + RAM. Seuils bornés par les valeurs par défaut faute de données vides ; régression logistique non retenue (< 3 sessions/classe)."
 }

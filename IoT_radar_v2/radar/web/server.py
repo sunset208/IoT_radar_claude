@@ -42,13 +42,35 @@ class AppState:
     """Détient le moteur courant ; permet de le relancer (changement de scénario)."""
 
     def __init__(self, engine_factory: Callable[[str | None], Engine], push_hz: float,
-                 scenarios: list[str] | None = None) -> None:
+                 scenarios: list[str] | None = None, extras: dict | None = None) -> None:
         self.factory = engine_factory
         self.push_hz = push_hz
         self.scenarios = scenarios or []
         self.lock = threading.Lock()
         self.version = 0
+        # sources annexes affichées à côté du Pluto (module 60 GHz, SFCW…) :
+        # objets avec .state() -> dict JSON et .version (int croissant)
+        self.extras: dict = extras or {}
         self.engine = self._new_engine(None)
+
+    def extras_state(self) -> dict:
+        out = {}
+        for name, ex in self.extras.items():
+            try:
+                out[name] = ex.state()
+            except Exception as exc:  # une annexe en panne ne doit pas couper l'UI
+                out[name] = {"status": "error", "error": str(exc)}
+        return out
+
+    def extras_version(self) -> int:
+        return sum(int(getattr(ex, "version", 0)) for ex in self.extras.values())
+
+    def stop_extras(self) -> None:
+        for ex in self.extras.values():
+            try:
+                ex.stop()
+            except Exception:
+                pass
 
     def _new_engine(self, scenario: str | None) -> Engine:
         eng = self.factory(scenario)
@@ -88,12 +110,17 @@ def create_app(state: AppState) -> FastAPI:
         eng = state.engine
         return _clean({
             "snapshot": eng.snapshot,
+            "fast": eng.fast,
             "history": _safe_list(eng.history),
             "waterfall": _safe_list(eng.waterfall),
             "waterfall_f": eng.waterfall_f,
+            "wave": _safe_list(eng.wave),
+            "wave_end_t": eng.wave_end_t,
             "scenarios": state.scenarios,
+            "extras": state.extras_state(),
             "config": {
                 "window_s": eng.cfg.analysis.window_s,
+                "scales_s": list(eng.cfg.scales_s),
                 "hop_s": eng.cfg.analysis.hop_s,
                 "breath_band": eng.cfg.analysis.breath_band,
                 "f_c": eng.cfg.sdr.f_c,
@@ -129,17 +156,41 @@ def create_app(state: AppState) -> FastAPI:
     async def ws(sock: WebSocket):
         await sock.accept()
         try:
+            eng = state.engine
             await sock.send_text(json.dumps({"type": "full", **full_state()}))
             seen = state.version
+            seen_snap, seen_wave, seen_hist = eng.snapshot_id, eng.wave_count, eng.hist_count
+            seen_extras = state.extras_version()
             period = 1.0 / max(state.push_hz, 1.0)
             while True:
                 await asyncio.sleep(period)
-                if state.version == seen:
+                if state.engine is not eng:          # moteur relancé (scénario) : état complet
+                    eng = state.engine
+                    await sock.send_text(json.dumps({"type": "full", **full_state()}))
+                    seen_snap, seen_wave, seen_hist = eng.snapshot_id, eng.wave_count, eng.hist_count
+                    continue
+                ev = state.extras_version()
+                if state.version == seen and ev == seen_extras:
                     continue
                 seen = state.version
-                eng = state.engine
-                msg = {"type": "update", "snapshot": eng.snapshot,
-                       "hist": eng.history[-1] if eng.history else None}
+                msg: dict = {"type": "update", "fast": eng.fast}
+                if eng.snapshot_id != seen_snap:
+                    seen_snap = eng.snapshot_id
+                    msg["snapshot"] = eng.snapshot
+                # toutes les nouveautés depuis le dernier envoi (aucune perte si
+                # la boucle prend du retard sur le moteur)
+                nw = min(eng.wave_count - seen_wave, len(eng.wave))
+                if nw > 0:
+                    msg["wave"] = _safe_list(eng.wave)[-nw:]
+                    msg["wave_end_t"] = eng.wave_end_t
+                seen_wave = eng.wave_count
+                nh = min(eng.hist_count - seen_hist, len(eng.history))
+                if nh > 0:
+                    msg["hist"] = _safe_list(eng.history)[-nh:]
+                seen_hist = eng.hist_count
+                if ev != seen_extras:
+                    seen_extras = ev
+                    msg["extras"] = state.extras_state()
                 await sock.send_text(json.dumps(_clean(msg)))
         except (WebSocketDisconnect, RuntimeError):
             return
@@ -155,3 +206,4 @@ def serve(state: AppState, host: str, port: int) -> None:
         uvicorn.run(app, host=host, port=port, log_level="warning")
     finally:
         state.engine.stop()
+        state.stop_extras()

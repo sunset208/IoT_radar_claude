@@ -51,7 +51,8 @@ class FrontendCfg:
 class AnalysisCfg:
     window_s: float = 20.0
     hop_s: float = 0.5
-    min_window_s: float = 10.0
+    min_window_s: float = 8.0          # obsolète (gardé pour relire d'anciens enregistrements)
+    extra_windows_s: tuple = (8.0, 12.0)   # échelles courtes du détecteur multi-échelle
     breath_band: tuple[float, float] = (0.1, 0.8)
     heart_band: tuple[float, float] = (0.8, 2.5)
     noise_band: tuple[float, float] = (4.0, 12.0)
@@ -65,6 +66,30 @@ class DetectorCfg:
     motion_threshold: float = 6.0
     on_count: int = 5
     off_count: int = 8
+    # seuils des échelles courtes (même ordre que analysis.extra_windows_s)
+    scale_snr_threshold_db: tuple = (18.0, 15.5)
+    scale_periodicity_threshold: tuple = (0.35, 0.35)
+    # une échelle courte n'est positive que si le rythme est stable (Hz) sur
+    # les on_count dernières fenêtres : une raie de bruit, elle, se promène
+    rate_consistency_hz: float = 0.04
+
+
+@dc.dataclass
+class FastCfg:
+    """Indices rapides 10 Hz (voir radar/dsp/fast.py)."""
+    enabled: bool = True
+    activity_s: float = 1.0
+    presence_s: float = 4.0
+    presence_band: tuple = (0.12, 1.0)
+    activity_band: tuple = (1.5, 15.0)
+    clutter_amp_dbc: float = -84.7      # (calib) bruit d'amplitude du clutter, bande de présence
+    clutter_phase_dbc: float = -65.3    # (calib) bruit de phase LO du clutter, bande de présence
+    presence_threshold_db: float = 6.0  # (calib)
+    presence_on_s: float = 1.5
+    presence_off_s: float = 3.0
+    activity_threshold_db: float = 8.0  # (calib)
+    activity_on_s: float = 0.3
+    activity_hold_s: float = 2.0
 
 
 @dc.dataclass
@@ -92,7 +117,7 @@ class RecordingCfg:
 class WebCfg:
     host: str = "127.0.0.1"
     port: int = 8050
-    push_hz: float = 10.0
+    push_hz: float = 20.0
 
 
 @dc.dataclass
@@ -108,6 +133,7 @@ class Config:
     frontend: FrontendCfg = dc.field(default_factory=FrontendCfg)
     analysis: AnalysisCfg = dc.field(default_factory=AnalysisCfg)
     detector: DetectorCfg = dc.field(default_factory=DetectorCfg)
+    fast: FastCfg = dc.field(default_factory=FastCfg)
     simulation: SimulationCfg = dc.field(default_factory=SimulationCfg)
     recording: RecordingCfg = dc.field(default_factory=RecordingCfg)
     web: WebCfg = dc.field(default_factory=WebCfg)
@@ -121,6 +147,12 @@ class Config:
     @property
     def total_decimation(self) -> int:
         return int(round(self.sdr.f_s / self.frontend.fs_slow))
+
+    @property
+    def scales_s(self) -> tuple[float, ...]:
+        """Fenêtres du détecteur multi-échelle, croissantes ; la dernière = window_s."""
+        return tuple(sorted(set(float(w) for w in self.analysis.extra_windows_s))) + (
+            float(self.analysis.window_s),)
 
     def validate(self) -> None:
         s, e, f, a = self.sdr, self.emission, self.frontend, self.analysis
@@ -151,8 +183,16 @@ class Config:
         ):
             if not 0 < lo < hi < nyq:
                 raise ValueError(f"analysis.{name}={lo, hi} hors ]0, fs_slow/2[.")
-        if a.hop_s <= 0 or a.window_s < a.min_window_s:
-            raise ValueError("analysis: hop_s > 0 et window_s ≥ min_window_s requis.")
+        if a.hop_s <= 0:
+            raise ValueError("analysis: hop_s > 0 requis.")
+        d_ = self.detector
+        if not (len(a.extra_windows_s) == len(d_.scale_snr_threshold_db)
+                == len(d_.scale_periodicity_threshold)):
+            raise ValueError("analysis.extra_windows_s, detector.scale_snr_threshold_db et "
+                             "detector.scale_periodicity_threshold doivent avoir la même longueur.")
+        for w in a.extra_windows_s:
+            if not 4.0 <= w < a.window_s:
+                raise ValueError(f"analysis.extra_windows_s : {w} s hors [4, window_s[.")
         if not 0 < e.amplitude <= 1:
             raise ValueError("emission.amplitude doit être dans ]0, 1].")
 
@@ -183,7 +223,7 @@ def _build(cls, data: dict[str, Any]):
         sub = _SECTIONS.get(name) if cls is Config else None
         if sub is not None:
             kwargs[name] = _build(sub, val or {})
-        elif isinstance(val, list):
+        elif isinstance(val, (list, tuple)):
             kwargs[name] = tuple(float(x) for x in val)
         elif isinstance(ftype, str) and ftype == "float" and isinstance(val, (int, str)):
             kwargs[name] = float(val)
@@ -198,6 +238,7 @@ _SECTIONS = {
     "frontend": FrontendCfg,
     "analysis": AnalysisCfg,
     "detector": DetectorCfg,
+    "fast": FastCfg,
     "simulation": SimulationCfg,
     "recording": RecordingCfg,
     "web": WebCfg,

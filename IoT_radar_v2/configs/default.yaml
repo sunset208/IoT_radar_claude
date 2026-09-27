@@ -37,9 +37,14 @@ frontend:
   cic_order: 2
 
 analysis:
-  window_s: 20.0             # fenêtre d'analyse (résolution ≈ 1/window_s)
-  hop_s: 0.5                 # rafraîchissement des décisions
-  min_window_s: 10.0         # première décision après ce délai
+  window_s: 20.0             # fenêtre longue (résolution ≈ 1/window_s) ; affichage
+  hop_s: 0.5                 # rafraîchissement des analyses
+  min_window_s: 8.0          # (obsolète, conservé pour relire d'anciens enregistrements)
+  # Détecteur multi-échelle : fenêtres courtes analysées en plus de window_s.
+  # Plus rapides (8 s au lieu de 20 s) mais il leur faut ~4–6 dB de SNR de
+  # plus : au SNR du labo (27/09) seule la fenêtre de 20 s détecte ; les
+  # courtes prennent le relais dès que le SNR augmente (antennes, 5.8 GHz).
+  extra_windows_s: [8.0, 12.0]
   breath_band: [0.1, 0.8]    # 6–48 resp/min
   heart_band: [0.8, 2.5]     # expérimental (48–150 bpm)
   noise_band: [4.0, 12.0]    # bande de référence du plancher de bruit
@@ -51,6 +56,32 @@ detector:
   motion_threshold: 6.0      # (calib) rapport max/médiane d'énergie sur 2 s
   on_count: 5                # fenêtres positives consécutives pour déclarer (2.5 s)
   off_count: 8               # fenêtres négatives consécutives pour relâcher
+  # (calib) seuils des fenêtres courtes, dans l'ordre de analysis.extra_windows_s.
+  # Fixés au-dessus du max mesuré en salle vide réelle (8 s : 16.7 dB ; 12 s : 13.3 dB).
+  scale_snr_threshold_db: [18.0, 15.5]
+  scale_periodicity_threshold: [0.35, 0.35]
+  rate_consistency_hz: 0.04  # échelles courtes : rythme stable à ±0.04 Hz sur on_count fenêtres
+
+fast:
+  # Indices rapides, 10 Hz, filtres causaux (radar/dsp/fast.py) :
+  #   présence = micro-mouvements lents (0.12–1 Hz, 4 s) → « signe de vie » en ~5 s
+  #   activité = mouvements francs (1.5–15 Hz, 1 s)      → état MOUVEMENT immédiat
+  # Normalisés par le bruit attendu en salle vide : thermique (mesuré en continu)
+  # + bruit multiplicatif de la fuite TX→RX (constantes ci-dessous, en dBc
+  # intégrés dans la bande de présence ; mesurées par `radar calibrate`).
+  enabled: true
+  activity_s: 1.0
+  presence_s: 4.0
+  presence_band: [0.12, 1.0]
+  activity_band: [1.5, 15.0]
+  clutter_amp_dbc: -84.7     # (calib) Pluto labo 27/09 : bruit d'amplitude de la fuite
+  clutter_phase_dbc: -65.3   # (calib) Pluto labo 27/09 : bruit de phase LO (≈ 0.54 mrad rms)
+  presence_threshold_db: 6.0 # (calib) salle vide réelle : p99.9 = 3.1 dB
+  presence_on_s: 1.5         # durée au-dessus du seuil pour déclarer la présence
+  presence_off_s: 3.0        # durée sous le seuil pour la relâcher
+  activity_threshold_db: 8.0 # (calib)
+  activity_on_s: 0.3
+  activity_hold_s: 2.0       # MOUVEMENT maintenu 2 s après la dernière bouffée
 
 simulation:
   scenario: breathing        # empty | breathing | motion | breathing_motion | walker | fan
@@ -72,7 +103,7 @@ recording:
 web:
   host: 127.0.0.1
   port: 8050
-  push_hz: 10
+  push_hz: 20                # cadence max. des messages WebSocket (indices rapides à 10 Hz)
 
 logging:
   level: INFO

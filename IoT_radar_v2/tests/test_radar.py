@@ -159,8 +159,9 @@ def test_engine_end_to_end(cfg):
     scene = Scene(SceneParams(scenario="breathing", wavelength=LAM, snr_db=20), rng)
     src = SimulatedSlowSource(FS, scene, realtime=False, rng=rng)
     eng = Engine(cfg, src)
-    states = []
-    eng.subscribe(lambda s: states.append(s.get("decision", {}).get("state")))
+    states, fast = [], []
+    eng.subscribe(lambda s: states.append(s["decision"]["state"]) if "decision" in s else None)
+    eng.subscribe(lambda s: fast.append(s["fast"]) if "fast" in s else None)
     eng.start()
     t0 = time.time()
     while len(states) < 120 and time.time() - t0 < 30:
@@ -168,11 +169,14 @@ def test_engine_end_to_end(cfg):
     eng.stop()
     assert BREATHING in states
     assert eng.error is None
+    # indices rapides publiés à ~10 Hz, ~4× plus souvent que les analyses (2 Hz)
+    assert len(fast) > 3 * len(states)
+    assert fast[-1]["presence_db"] > 6.0
 
 
 def test_detector_hysteresis(cfg):
     from radar.dsp.vitals import Features
-    det = Detector(cfg.detector)
+    det = Detector(cfg.detector, window_s=cfg.analysis.window_s)
     pos = Features(snr_db=20, concentration=0.8, acf=0.8, motion=1.2, band_db=20, breath_hz=0.3)
     neg = Features(snr_db=2, concentration=0.05, acf=0.2, motion=1.2, band_db=1, breath_hz=0.3)
     states = [det.update(pos).state for _ in range(cfg.detector.on_count)]
@@ -214,3 +218,60 @@ def test_real_pluto_paced_breathing(cfg):
     bpm = [va.analyze(rec.slow[i:i + 1000], want_display=False)[0].breath_bpm
            for i in range(1000, len(rec.slow) - 1000, 250)]
     assert abs(np.median(bpm) - 15.0) < 1.0
+
+
+# ---------------------------------------------------------------- indices rapides / multi-échelle
+def _run_fast(x, fs=FS, params=None):
+    from radar.dsp.fast import FastMonitor
+    fm = FastMonitor(fs, params, LAM)
+    ticks = []
+    for i in range(0, len(x), 5):
+        ticks += fm.push(x[i:i + 5], (i + 5) / fs)
+    return ticks
+
+
+def test_fast_monitor_white_noise_is_0db():
+    """Sous H0 (bruit blanc, clutter parfait) les indices valent ≈ 0 dB."""
+    from radar.dsp.fast import FastParams
+    rng = np.random.default_rng(0)
+    x = 0.3 + 1e-4 * (rng.standard_normal(9000) + 1j * rng.standard_normal(9000))
+    t = _run_fast(x, params=FastParams(clutter_amp_dbc=-150, clutter_phase_dbc=-150))
+    assert len(t) > 800                       # ~10 Hz après 4 s de mise en route
+    pres = np.array([k.presence_r_db for k in t])
+    act = np.array([k.activity_db for k in t])
+    assert abs(np.median(pres)) < 1.5 and abs(np.median(act)) < 1.0
+    assert np.percentile(pres, 99.9) < 6.0 and np.percentile(act, 99.9) < 8.0
+
+
+def test_fast_presence_and_activity(cfg):
+    rng = np.random.default_rng(4)
+    x, _ = simulate_slow("breathing", 40, FS, LAM, rng, snr_db=15)
+    t = _run_fast(x)
+    assert np.median([k.presence_db for k in t]) > cfg.fast.presence_threshold_db + 1
+    x, _ = simulate_slow("walker", 40, FS, LAM, rng, snr_db=25)
+    t = _run_fast(x)
+    assert np.percentile([k.activity_db for k in t], 90) > cfg.fast.activity_threshold_db
+
+
+def test_first_alert_is_fast_on_real_recording(cfg):
+    """Vrai Pluto : la présence (signe de vie) est signalée en < 8 s, bien avant la
+    confirmation de la respiration (~30 s) ; la salle vide reste muette."""
+    from radar.config import load_config
+    c = load_config(overrides={"sdr": {"f_c": 1.8e9}})
+    rec = load_recording(Path(__file__).parent / "data" / "real_pluto_paced15_1800MHz.npz")
+    r = evaluate_sequence(rec.slow, rec.fs_slow, c, 1, "real")
+    assert r.alert_s is not None and r.alert_s < 8.0
+    assert r.latency_s is not None and r.alert_s < r.latency_s
+    rng = np.random.default_rng(9)
+    x, _ = simulate_slow("empty", 120, FS, c.sdr.wavelength, rng, snr_db=20, lo_drift_rad=0.01)
+    r = evaluate_sequence(x, FS, c, 0, "e")
+    assert r.alert_s is None
+
+
+def test_multiscale_confirms_faster_at_high_snr(cfg):
+    """À fort SNR, une fenêtre courte confirme la respiration bien avant 20 s."""
+    rng = np.random.default_rng(21)
+    x, _ = simulate_slow("breathing", 60, FS, LAM, rng, snr_db=30, breath_depth_mm=6)
+    r = evaluate_sequence(x, FS, cfg, 1, "b")
+    assert r.latency_s is not None and r.latency_s < 18.0      # 20 s seule : ≥ 22.5 s
+    assert r.confirm_scale_s is not None and r.confirm_scale_s < cfg.analysis.window_s

@@ -136,10 +136,19 @@ def fit_circle(x: np.ndarray) -> tuple[complex, float, float] | None:
     if not np.isfinite(r2) or r2 <= 0:
         return None
     scale = float(np.sqrt(np.mean(b))) + 1e-30
+    xs, ys = xr / scale, yr / scale
+
+    def _res(p):
+        return np.hypot(xs - p[0], ys - p[1]) - p[2]
+
+    def _jac(p):
+        d = np.maximum(np.hypot(xs - p[0], ys - p[1]), 1e-12)
+        return np.column_stack(((p[0] - xs) / d, (p[1] - ys) / d, -np.ones_like(d)))
+
     try:
         res = optimize.least_squares(
-            lambda p: np.hypot(xr / scale - p[0], yr / scale - p[1]) - p[2],
-            x0=[cx / scale, cy / scale, math.sqrt(r2) / scale], method="lm", max_nfev=60)
+            _res, x0=[cx / scale, cy / scale, math.sqrt(r2) / scale], jac=_jac,
+            method="lm", max_nfev=60)
         cx, cy, r = res.x[0] * scale, res.x[1] * scale, abs(res.x[2]) * scale
     except Exception:
         r = math.sqrt(r2)
@@ -220,8 +229,10 @@ class VitalsAnalyzer:
         return (np.abs(X) ** 2) / (self.fs * ws)
 
     # ------------------------------------------------------------------
-    def analyze(self, x: np.ndarray, t: float = 0.0,
-                want_display: bool = True) -> tuple[Features, Display | None]:
+    def analyze(self, x: np.ndarray, t: float = 0.0, want_display: bool = True,
+                full: bool = True) -> tuple[Features, Display | None]:
+        """*full=False* : features de détection seules (pas de cercle, d'amplitude
+        en mm ni de cœur) — échelles courtes du détecteur multi-échelle."""
         x = np.asarray(x, dtype=np.complex128)
         fs = self.fs
         feats = Features(t=t)
@@ -242,7 +253,7 @@ class VitalsAnalyzer:
 
         # --- démodulation arc-tangente (si un arc est identifiable) -------
         disp = None
-        circ = fit_circle(x)
+        circ = fit_circle(x) if full else None
         if circ is not None:
             c, r, res = circ
             ph = np.unwrap(np.angle(x - c))
