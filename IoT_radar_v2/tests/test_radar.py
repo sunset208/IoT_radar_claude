@@ -275,3 +275,11 @@ def test_multiscale_confirms_faster_at_high_snr(cfg):
     r = evaluate_sequence(x, FS, cfg, 1, "b")
     assert r.latency_s is not None and r.latency_s < 18.0      # 20 s seule : ≥ 22.5 s
     assert r.confirm_scale_s is not None and r.confirm_scale_s < cfg.analysis.window_s
+
+
+def test_protocol_plans_are_valid():
+    from radar.protocol import PLANS_DIR, load_plan
+    for p in sorted(PLANS_DIR.glob("*.yaml")):
+        name, steps = load_plan(str(p))
+        assert steps and all(s.label in (-1, 0, 1) and s.duration_s > 0 for s in steps)
+        assert any(s.label == 0 for s in steps)          # chaque plan contient de la salle vide

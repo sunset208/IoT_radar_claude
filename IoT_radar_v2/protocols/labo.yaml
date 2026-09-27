@@ -1,0 +1,25 @@
+# Séance type (~20 min) : calibration + positions variées.
+# Chaque étape = un enregistrement étiqueté (1 = respiration présente, 0 = vide).
+# annotate : [secondes depuis le début de l'étape, texte] → consigne affichée
+# et annotation horodatée dans l'enregistrement.
+name: labo
+steps:
+  - {name: vide_1, label: 0, duration_s: 180,
+     instruction: "Sortez de la pièce (ou reculez à plus de 5 m, hors du champ des antennes). Plus personne ne bouge."}
+  - {name: resp_1m, label: 1, duration_s: 120,
+     instruction: "Asseyez-vous face aux antennes à 1 m. Respiration normale, immobile."}
+  - {name: resp_50cm, label: 1, duration_s: 90,
+     instruction: "Rapprochez-vous à 50 cm. Respiration normale."}
+  - {name: resp_2m, label: 1, duration_s: 120,
+     instruction: "Reculez à 2 m. Respiration normale."}
+  - {name: apnee_1m, label: 1, duration_s: 90,
+     instruction: "Revenez à 1 m. Suivez les consignes : apnée puis reprise.",
+     annotate: [[15, "apnée"], [40, "reprise"]]}
+  - {name: dos_1m, label: 1, duration_s: 90,
+     instruction: "À 1 m, de dos aux antennes. Respiration normale."}
+  - {name: cote_1m, label: 1, duration_s: 90,
+     instruction: "À 1 m, de profil. Respiration normale."}
+  - {name: mouvement_1m, label: 1, duration_s: 60,
+     instruction: "À 1 m : bougez bras et buste sans vous déplacer (confondeur)."}
+  - {name: vide_2, label: 0, duration_s: 180,
+     instruction: "Sortez à nouveau de la pièce."}

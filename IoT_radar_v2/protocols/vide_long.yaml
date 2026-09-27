@@ -1,0 +1,6 @@
+# 10 min de salle vide : de quoi calibrer vraiment les seuils (la calibration
+# du 27/09 repose sur 75 s, ce qui borne mal les fausses alarmes).
+name: vide_long
+steps:
+  - {name: vide_long, label: 0, duration_s: 600,
+     instruction: "Salle vide pendant 10 minutes : sortez, fermez la porte, rien ne bouge (ventilateur éteint)."}

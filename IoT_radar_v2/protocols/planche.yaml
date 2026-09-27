@@ -1,0 +1,17 @@
+# Test de pénétration : planche de bois (~1 cm) entre le radar et le sujet.
+# À faire en CW (radar protocole), en SFCW (--mode sfcw) et avec le module
+# 60 GHz branché (--mr60 COMx) pour comparer les trois.
+name: planche
+steps:
+  - {name: vide, label: 0, duration_s: 120,
+     instruction: "Salle vide (sortez)."}
+  - {name: sans_planche_50cm, label: 1, duration_s: 90,
+     instruction: "À 50 cm des antennes, SANS planche. Respiration normale, immobile."}
+  - {name: planche_50cm, label: 1, duration_s: 90,
+     instruction: "À 50 cm, la planche tenue à ~25 cm des antennes (entre vous et le radar), bien perpendiculaire."}
+  - {name: sans_planche_1m, label: 1, duration_s: 90,
+     instruction: "À 1 m, SANS planche."}
+  - {name: planche_1m, label: 1, duration_s: 90,
+     instruction: "À 1 m, planche à mi-distance."}
+  - {name: planche_seule, label: 0, duration_s: 90,
+     instruction: "Posez la planche à mi-distance sur un support et sortez (vérifie que la planche seule ne déclenche rien)."}

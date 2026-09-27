@@ -7,6 +7,7 @@ record      enregistrement sans interface (sessions scriptées)
 check       diagnostic matériel (niveaux, fuite, stabilité de phase, débit)
 scan        balayage de fréquences : bruit ambiant (et fuite TX→RX avec --tx)
 sfcw        mode à fréquence balayée : run | bench | record | analyze
+protocole   séance d'enregistrement guidée (plans dans protocols/)
 evaluate    métriques du détecteur sur enregistrements ou scénarios simulés
 calibrate   seuils (et régression logistique) à partir d'enregistrements étiquetés
 convert-v1  conversion des .iq de la v1 vers le format v2
@@ -320,6 +321,16 @@ def _add_mr60(cfg, args, extras: dict) -> None:
     extras["mr60"] = rd
 
 
+def cmd_protocole(args) -> int:
+    from radar.protocol import run_protocol
+    cfg = _sfcw_cfg(args) if args.mode == "sfcw" else load_config(args.config, _overrides(args))
+    if args.out:
+        cfg.recording.dir = args.out
+        cfg.sfcw.record_dir = args.out
+    logging.basicConfig(level=logging.WARNING)
+    return run_protocol(cfg, args)
+
+
 def cmd_scan(args) -> int:
     from radar.hwcheck import run_scan
     cfg = load_config(args.config, _overrides(args))
@@ -382,6 +393,26 @@ def main(argv=None) -> int:
     sn.add_argument("--tx", action="store_true",
                     help="émettre la tonalité : mesure aussi la fuite TX→RX (réponse des antennes)")
     sn.set_defaults(fn=cmd_scan)
+
+    pr = sub.add_parser("protocole", help="séance d'enregistrement guidée")
+    common(pr)
+    pr.add_argument("--plan", default="labo", help="labo | planche | vide_long | chemin/vers/plan.yaml")
+    pr.add_argument("--session", help="nom de séance (défaut : plan_date)")
+    pr.add_argument("--mode", choices=("cw", "sfcw"), default="cw")
+    pr.add_argument("--source", choices=("pluto", "sim", "sim-rf", "fake"), default="pluto")
+    pr.add_argument("--scenario", help="(simulation) scénario")
+    pr.add_argument("--range", type=float, help="(simulation SFCW) distance de la cible")
+    pr.add_argument("--sweep-hz", type=float, default=4.0)
+    pr.add_argument("--file", help=argparse.SUPPRESS)
+    pr.add_argument("--start", type=float)
+    pr.add_argument("--step", type=float)
+    pr.add_argument("--steps", type=int)
+    pr.add_argument("--mr60", help="port série du module 60 GHz (mesures sauvées à côté)")
+    pr.add_argument("--mr60-baud", type=int, default=115200)
+    pr.add_argument("--auto", type=float, default=0,
+                    help="enchaîner sans attendre Entrée, avec N s de compte à rebours")
+    pr.add_argument("--out", help="dossier des enregistrements")
+    pr.set_defaults(fn=cmd_protocole)
 
     sf = sub.add_parser("sfcw", help="mode à fréquence balayée (amplitude seule)")
     common(sf)
