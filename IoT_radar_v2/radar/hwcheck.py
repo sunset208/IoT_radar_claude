@@ -179,6 +179,17 @@ def run_check(cfg: Config, stability_s: float = 0.0, sim: bool = False) -> int:
                 _p(f"  {k:18s}: {attrs[k]}")
     except Exception:
         pass
+    from radar.sources.pluto import lo_range
+    rng = lo_range(sdr)
+    if rng:
+        unlocked = rng[1] > 4e9
+        _p(f"  plage LO          : {rng[0] / 1e6:.0f}–{rng[1] / 1e6:.0f} MHz "
+           f"({'AD9364 déverrouillé' if unlocked else 'AD9363 d origine'})")
+        if unlocked and cfg.sdr.chip == "ad9363":
+            _p("  (le Pluto est déverrouillé : sdr.chip: ad9364 autorise jusqu'à 6 GHz)")
+        if not unlocked and cfg.sdr.chip == "ad9364":
+            _p("  ⚠ sdr.chip: ad9364 mais le firmware est limité à 3.8 GHz : déverrouillage absent"
+               " ou pas encore redémarré (README, « Passer à 5.8 GHz »).")
     _p(f"  f_c={cfg.sdr.f_c / 1e9:.3f} GHz  f_s={cfg.sdr.f_s / 1e3:.0f} kS/s  "
        f"RX {cfg.sdr.rx_gain_db} dB  TX {cfg.sdr.tx_atten_db} dB")
 

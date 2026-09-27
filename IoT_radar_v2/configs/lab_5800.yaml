@@ -1,0 +1,41 @@
+# Config 5.8 GHz — À N'UTILISER QU'APRÈS le déverrouillage du Pluto en AD9364
+# (README, « Passer à 5.8 GHz ») et, idéalement, avec des antennes adaptées.
+#
+# Pourquoi 5.8 GHz : λ = 5.2 cm (contre 16.7 cm à 1.8 GHz) → pour un même
+# déplacement thoracique, la phase tourne 3.2× plus : +10 dB de modulation,
+# et la même dérive de phase LO pèse 3.2× moins en millimètres.
+# Contreparties : les antennes d'origine du Pluto n'y sont PAS adaptées
+# (résonances 0.9 et 1.7–2.0 GHz : attendre −20 dB et plus), et la
+# pénétration dans les matériaux est moins bonne (béton, bois humide).
+#
+# Bande ISM/SRD 5725–5875 MHz : 25 mW PIRE max (ERC/REC 70-03).  Le Pluto
+# sort quelques mW à 5.8 GHz à atténuation 0 : même avec un patch de 8 dBi,
+# on reste sous 25 mW PIRE.
+#
+# 1. radar.bat --config configs\lab_5800.yaml check        → plage LO 70–6000 MHz ?
+# 2. radar.bat --config configs\lab_5800.yaml scan --start 5.65e9 --stop 5.925e9 --step 5e6
+#    (bruit ambiant : drones FPV, télépéage DSRC 5.795–5.815 GHz, Wi-Fi…)
+#    puis la même commande avec --tx pour la réponse des antennes.
+# 3. Ajuster f_c (fréquence calme) et rx_gain_db (crête ADC −20…−6 dBFS).
+sdr:
+  chip: ad9364
+  f_c: 5.8e9
+  tx_atten_db: 0             # ≈ quelques mW à 5.8 GHz (le PA du Pluto faiblit en haut de bande)
+  rx_gain_db: 40             # antennes mal adaptées → couplage faible : plus de gain (à ajuster)
+
+sfcw:
+  # 5.2–6.0 GHz, 40 pas de 20 MHz : 19 cm de résolution, 3.75 m de portée.
+  # Avec des antennes large bande (log-périodique 0.85–6.5 GHz), on peut
+  # balayer beaucoup plus large (ex. f_start 1.0e9, f_step 40e6, n_steps 100 :
+  # 3.7 cm de résolution, mais portée 1.9 m et balayages 2× plus lents).
+  f_start: 5.2e9
+  f_step: 20.0e6
+  n_steps: 40
+  rx_gain_db: 40
+
+fast:
+  # Le bruit de phase d'une PLL croît en 20·log10(f) : ~+10 dB entre 1.8 et
+  # 5.8 GHz.  Valeurs prudentes en attendant `radar calibrate` sur un
+  # enregistrement « vide » fait À 5.8 GHz (les constantes du 27/09 sont à 1.8 GHz).
+  clutter_phase_dbc: -55.0
+  clutter_amp_dbc: -80.0
