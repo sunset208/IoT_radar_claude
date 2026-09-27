@@ -1,0 +1,6 @@
+01:48:42 [INFO] radar.dsp.frontend — Frontend : 1000000 Hz → CIC2(R=100) → 10×10×2 → 50.0 Hz (f_offset=10000 Hz)
+01:48:42 [INFO] radar.web.server — Tableau de bord : http://127.0.0.1:8050
+01:49:38 [INFO] radar.pipeline — Moteur arrêté
+01:49:38 [INFO] radar.dsp.frontend — Frontend : 1000000 Hz → CIC2(R=100) → 10×10×2 → 50.0 Hz (f_offset=10000 Hz)
+01:50:14 [INFO] radar.recorder — Enregistrement → F:\Claude\ProjetS7\IoT_radar_v2\data\recordings\20260927_015014_vide_test-ui.npz
+01:50:17 [INFO] radar.recorder — Enregistrement fermé : F:\Claude\ProjetS7\IoT_radar_v2\data\recordings\20260927_015014_vide_test-ui.npz (3.5 s)

@@ -1,0 +1,7 @@
+02:12:03 [INFO] radar.dsp.frontend — Frontend : 1000000 Hz → CIC2(R=100) → 10×10×2 → 50.0 Hz (f_offset=10000 Hz)
+02:12:03 [INFO] radar.web.server — Tableau de bord : http://127.0.0.1:8050
+02:12:04 [INFO] radar.sources.pluto — Pluto : TX cyclique 100000 éch. (10000 Hz), RX 100000 éch./buffer
+02:14:55 [INFO] radar.recorder — Enregistrement → F:\Claude\ProjetS7\IoT_radar_v2\data\recordings\20260927_021455_resp_apnee_test_50cm_ram.npz
+02:16:39 [INFO] radar.recorder — Enregistrement fermé : F:\Claude\ProjetS7\IoT_radar_v2\data\recordings\20260927_021455_resp_apnee_test_50cm_ram.npz (103.8 s)
+02:20:17 [INFO] radar.recorder — Enregistrement → F:\Claude\ProjetS7\IoT_radar_v2\data\recordings\20260927_022017_resp_rythme15_50cm_1800.npz
+02:21:53 [INFO] radar.recorder — Enregistrement fermé : F:\Claude\ProjetS7\IoT_radar_v2\data\recordings\20260927_022017_resp_rythme15_50cm_1800.npz (95.7 s)

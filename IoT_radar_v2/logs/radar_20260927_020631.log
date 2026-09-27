@@ -1,0 +1,6 @@
+02:06:31 [INFO] radar.dsp.frontend — Frontend : 1000000 Hz → CIC2(R=100) → 10×10×2 → 50.0 Hz (f_offset=10000 Hz)
+02:06:31 [INFO] radar.recorder — Enregistrement → F:\Claude\ProjetS7\IoT_radar_v2\data\recordings\20260927_020631_resp_live_test1.npz
+02:06:32 [INFO] radar.sources.pluto — Pluto : TX cyclique 100000 éch. (10000 Hz), RX 100000 éch./buffer
+02:07:32 [INFO] radar.sources.pluto — Pluto arrêté (buffers perdus : 0, débordements suspects : 0)
+02:07:32 [INFO] radar.recorder — Enregistrement fermé : F:\Claude\ProjetS7\IoT_radar_v2\data\recordings\20260927_020631_resp_live_test1.npz (60.0 s)
+02:07:32 [INFO] radar.pipeline — Moteur arrêté

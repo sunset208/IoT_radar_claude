@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Radar Respiration</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <div class="brand">
+    <span class="dot" id="conn-dot"></span>
+    <h1>Radar Respiration <small>v2</small></h1>
+  </div>
+  <div class="src" id="src-desc">—</div>
+</header>
+
+<main>
+  <section class="status card" id="status-card">
+    <div class="state" id="state">CONNEXION…</div>
+    <div class="state-sub" id="state-sub"></div>
+    <div class="kpis">
+      <div class="kpi"><span class="kv" id="k-bpm">—</span><span class="kl">resp/min</span></div>
+      <div class="kpi"><span class="kv" id="k-score">—</span><span class="kl">confiance</span></div>
+      <div class="kpi"><span class="kv" id="k-snr">—</span><span class="kl">SNR pic (dB)</span></div>
+      <div class="kpi"><span class="kv" id="k-mm">—</span><span class="kl">amplitude (mm)</span></div>
+      <div class="kpi exp"><span class="kv" id="k-hr">—</span><span class="kl">cœur (exp.)</span></div>
+    </div>
+    <div class="truth" id="truth"></div>
+  </section>
+
+  <section class="card wide">
+    <h2>Mouvement thoracique <span class="unit" id="wave-unit"></span></h2>
+    <canvas id="c-wave"></canvas>
+  </section>
+
+  <section class="card">
+    <h2>Spectre (normalisé au plancher local)</h2>
+    <canvas id="c-spec"></canvas>
+  </section>
+
+  <section class="card">
+    <h2>Constellation IQ <span class="unit">(centrée)</span></h2>
+    <canvas id="c-iq" class="square"></canvas>
+  </section>
+
+  <section class="card wide">
+    <h2>Spectrogramme 0–3 Hz <span class="unit">(historique)</span></h2>
+    <canvas id="c-wf"></canvas>
+  </section>
+
+  <section class="card wide">
+    <h2>Historique <span class="unit">(5 min — confiance, SNR, état)</span></h2>
+    <canvas id="c-hist"></canvas>
+  </section>
+
+  <section class="card">
+    <h2>Santé du système</h2>
+    <table class="health" id="health"></table>
+  </section>
+
+  <section class="card">
+    <h2>Enregistrement</h2>
+    <div class="rec-row">
+      <label>Étiquette</label>
+      <div class="seg" id="rec-label">
+        <button data-v="1" class="on">Respiration</button>
+        <button data-v="0">Vide</button>
+        <button data-v="-1">Inconnu</button>
+      </div>
+    </div>
+    <div class="rec-row"><label for="rec-tag">Session</label><input id="rec-tag" placeholder="ex. salle-B_2m_briques"></div>
+    <div class="rec-row"><label for="rec-notes">Notes</label><input id="rec-notes" placeholder="distance, obstacles, sujet…"></div>
+    <div class="rec-row">
+      <button id="rec-btn" class="primary">● Démarrer</button>
+      <span id="rec-info" class="muted"></span>
+    </div>
+    <div class="rec-row annots">
+      <label>Annoter</label>
+      <button data-a="apnée">apnée</button>
+      <button data-a="mouvement">mouvement</button>
+      <button data-a="entrée">entrée</button>
+      <button data-a="sortie">sortie</button>
+    </div>
+    <div class="rec-row" id="scen-row" hidden>
+      <label for="scen">Scénario simulé</label>
+      <select id="scen"></select>
+    </div>
+  </section>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,79 @@
+# =============================================================================
+# IoT Radar v2 — configuration par défaut
+# =============================================================================
+# Radar CW à porteuse décalée (PlutoSDR) pour la détection de respiration.
+#
+# Chaîne :  Pluto RX (f_s) ─► NCO −f_offset ─► CIC ─► IIR ─► « slow-time » (fs_slow)
+#           ─► analyse glissante (fenêtre window_s, pas hop_s) ─► détecteur ─► UI
+#
+# Unités : Hz, secondes, dB.  Les valeurs marquées (calib) sont écrasées par
+# le fichier produit par `radar calibrate` s'il est fourni avec --calibration.
+# =============================================================================
+
+sdr:
+  uri: "ip:192.168.2.1"      # "usb:" aussi possible si le driver WinUSB est installé
+  f_c: 3.5e9                 # porteuse (λ ≈ 8.6 cm).  2.4e9 → λ = 12.5 cm
+  f_s: 1.0e6                 # min. pyadi-iio = 521 kS/s.  1 MS/s = marge USB confortable
+  rf_bandwidth: 1.0e6
+  rx_gain_db: 40             # gain manuel ; viser -20…-6 dBFS sur la fuite TX→RX
+  tx_atten_db: -20           # atténuation TX (négatif).  0 = puissance max (~+7 dBm)
+  rx_buffer_size: 100000     # 100 ms à 1 MS/s ; multiple de f_s/f_offset
+  kernel_buffers: 16         # buffers DMA côté Pluto (absorbe les à-coups de l'OS)
+  # Les boucles de tracking de l'AD9363 agissent près du DC et peuvent
+  # manger un signal lent : on les coupe (le décalage f_offset nous en protège).
+  disable_tracking: true
+
+emission:
+  # Tonalité complexe à f_offset en bande de base : l'écho utile arrive à
+  # f_offset, loin du DC/1/f/fuite LO du récepteur.  Le code force un nombre
+  # entier de périodes dans le buffer TX cyclique (sinon raies parasites).
+  f_offset: 10000.0
+  amplitude: 0.5             # fraction de la pleine échelle DAC (évite l'écrêtage)
+
+frontend:
+  fs_slow: 50.0              # fréquence du signal « slow-time » (après décimation)
+  # 1er étage : CIC d'ordre 2 de facteur f_s/f_offset (zéros exactement sur
+  # les multiples de f_offset → réjection du DC récepteur et de l'image TX).
+  cic_order: 2
+
+analysis:
+  window_s: 20.0             # fenêtre d'analyse (résolution ≈ 1/window_s)
+  hop_s: 0.5                 # rafraîchissement des décisions
+  min_window_s: 10.0         # première décision après ce délai
+  breath_band: [0.1, 0.8]    # 6–48 resp/min
+  heart_band: [0.8, 2.5]     # expérimental (48–150 bpm)
+  noise_band: [4.0, 12.0]    # bande de référence du plancher de bruit
+  nfft: 8192                 # zero-padding du périodogramme
+
+detector:
+  snr_threshold_db: 10.0     # (calib) pic respiratoire / plancher coloré local (dB)
+  periodicity_threshold: 0.35  # (calib) max(concentration spectrale, ACF)
+  motion_threshold: 6.0      # (calib) rapport max/médiane d'énergie sur 2 s
+  on_count: 5                # fenêtres positives consécutives pour déclarer (2.5 s)
+  off_count: 8               # fenêtres négatives consécutives pour relâcher
+
+simulation:
+  scenario: breathing        # empty | breathing | motion | breathing_motion | walker | fan
+  realtime: true
+  seed: null
+  distance_m: 2.0
+  snr_db: 25.0               # SNR de la cible (dans la bande slow-time) — voir scene.py
+  leak_dbfs: -12.0           # fuite TX→RX + échos statiques (dominants)
+  rx_dc_dbfs: -30.0          # offset DC du récepteur (à 0 Hz)
+  breath_rate_bpm: 16.0
+  breath_depth_mm: 6.0
+  heart_rate_bpm: 70.0
+  heart_depth_mm: 0.25
+
+recording:
+  dir: data/recordings
+  save_raw: false            # IQ brut à f_s (très gros : 8 Mo/s) — debug seulement
+
+web:
+  host: 127.0.0.1
+  port: 8050
+  push_hz: 10
+
+logging:
+  level: INFO
+  dir: logs

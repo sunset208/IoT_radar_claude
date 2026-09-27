@@ -1,0 +1,47 @@
+# =============================================================================
+# IA — détection de respiration sur slow-time (voir ai/README.md)
+# =============================================================================
+seed: 42
+device: auto                 # auto | cuda | cpu
+
+data:
+  fs: 50.0                   # doit correspondre à frontend.fs_slow des enregistrements
+  window_s: 20.0             # même fenêtre que le détecteur classique (comparaison équitable)
+  hop_s: 2.0                 # pas entre fenêtres réelles (recouvrement 90 %)
+  wavelength: 0.0856549      # λ = c / f_c (3.5 GHz)
+  recordings: [data/recordings, data/v1_converted]
+  val_frac: 0.25             # fraction des *sessions* en validation (jamais de fenêtres)
+
+pretrain:                    # étape 1 : simulateur seul (données infinies)
+  steps: 30000
+  batch_size: 256
+  lr: 2.0e-3
+  val_windows: 4000          # jeu de validation synthétique figé (autre graine)
+
+finetune:                    # étape 2 : réel + semi-synthétique (+ un peu de synthétique)
+  epochs: 40
+  steps_per_epoch: 400
+  batch_size: 128
+  lr: 3.0e-4
+  mix: {real: 0.5, semi: 0.35, synth: 0.15}
+  patience: 8                # arrêt anticipé sur l'AUC de validation réelle
+
+model:
+  name: resnet1d             # resnet1d (~0.5 M) | convtransformer (~3 M, si beaucoup de données)
+  ch: 64
+  blocks: 8
+  dropout: 0.2
+
+loss:
+  rate_weight: 0.3           # tâche auxiliaire : rythme (Hz), masquée si inconnu
+  label_smoothing: 0.02
+
+train:
+  num_workers: 6
+  amp: true                  # bf16 sur GPU
+  compile: false             # torch.compile (Triton peu fiable sous Windows)
+  weight_decay: 0.01
+  pfa_target: 0.01           # seuil de décision choisi pour ce taux de FA par fenêtre
+
+output:
+  dir: ai/runs

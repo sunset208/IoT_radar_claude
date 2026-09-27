@@ -1,0 +1,8 @@
+# Config labo (chambre anéchoïque) — mesures du 27/09/2026 :
+#  * 2.45 GHz pollué par le Wi-Fi/BT des appareils de la pièce (pics −8 dBFS)
+#  * antennes Pluto d'origine résonantes vers 0.9 et 1.7–2.0 GHz
+#  → 1.8 GHz, bande calme ici.  TX 0 dB ≈ +7 dBm = 5 mW (inoffensif).
+sdr:
+  f_c: 1.8e9
+  tx_atten_db: 0
+  rx_gain_db: 20

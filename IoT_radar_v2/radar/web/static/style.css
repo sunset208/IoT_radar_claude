@@ -1,0 +1,74 @@
+:root {
+  --bg: #0d1117; --card: #161b22; --card2: #1f2630; --line: #2d3643;
+  --text: #e6edf3; --muted: #8b98a8; --accent: #4fb3ff;
+  --ok: #3fb950; --warn: #e3a02b; --bad: #f85149; --idle: #6e7b8b;
+  --plot1: #4fb3ff; --plot2: #c297ff; --grid: #26303c; --band: rgba(63,185,80,.12);
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f4f6f9; --card: #ffffff; --card2: #eef1f5; --line: #d6dce4;
+    --text: #1b2430; --muted: #5b6878; --accent: #0969da;
+    --plot1: #0969da; --plot2: #8250df; --grid: #e4e8ee; --band: rgba(26,127,55,.10);
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 14px/1.4 "Segoe UI", system-ui, -apple-system, sans-serif; }
+header { display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 16px; border-bottom: 1px solid var(--line); gap: 12px; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 10px; }
+h1 { font-size: 18px; margin: 0; font-weight: 600; }
+h1 small { color: var(--muted); font-weight: 400; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--bad); }
+.dot.on { background: var(--ok); }
+.src { color: var(--muted); font-size: 13px; }
+main { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+  gap: 12px; padding: 12px 16px 24px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+  padding: 10px 12px; min-width: 0; }
+.card.wide { grid-column: span 2; }
+@media (max-width: 900px) { main { grid-template-columns: 1fr; } .card.wide { grid-column: auto; } }
+h2 { font-size: 13px; margin: 0 0 6px; color: var(--muted); font-weight: 600;
+  text-transform: uppercase; letter-spacing: .04em; }
+h2 .unit { text-transform: none; font-weight: 400; letter-spacing: 0; }
+canvas { width: 100%; height: 180px; display: block; }
+canvas.square { height: 220px; }
+#c-wf { height: 160px; }
+#c-hist { height: 150px; }
+
+.status { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(260px, 1fr) 2fr;
+  align-items: center; gap: 8px 20px; border-width: 2px; }
+@media (max-width: 900px) { .status { grid-template-columns: 1fr; } }
+.state { font-size: 38px; font-weight: 800; letter-spacing: .02em; color: var(--idle); }
+.state-sub { color: var(--muted); grid-column: 1; }
+.kpis { grid-column: 2; grid-row: 1 / span 2; display: flex; gap: 10px; flex-wrap: wrap; }
+@media (max-width: 900px) { .kpis { grid-column: 1; grid-row: auto; } }
+.kpi { background: var(--card2); border-radius: 8px; padding: 8px 12px; min-width: 110px; flex: 1; }
+.kv { display: block; font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.kl { color: var(--muted); font-size: 12px; }
+.kpi.exp { opacity: .75; }
+.truth { grid-column: 1 / -1; color: var(--muted); font-size: 12px; }
+.status.s-RESPIRATION { border-color: var(--ok); } .status.s-RESPIRATION .state { color: var(--ok); }
+.status.s-MOUVEMENT { border-color: var(--warn); } .status.s-MOUVEMENT .state { color: var(--warn); }
+.status.s-VIDE .state { color: var(--idle); }
+.status.s-error { border-color: var(--bad); } .status.s-error .state { color: var(--bad); }
+
+table.health { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.health td { padding: 3px 4px; border-bottom: 1px solid var(--line); }
+table.health td:first-child { color: var(--muted); }
+table.health td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+.bad { color: var(--bad); } .warn { color: var(--warn); } .good { color: var(--ok); }
+
+.rec-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; flex-wrap: wrap; }
+.rec-row label { width: 90px; color: var(--muted); font-size: 13px; }
+input, select { flex: 1; min-width: 140px; background: var(--card2); color: var(--text);
+  border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font: inherit; }
+button { background: var(--card2); color: var(--text); border: 1px solid var(--line);
+  border-radius: 6px; padding: 6px 10px; font: inherit; cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
+button.primary.rec { background: var(--bad); border-color: var(--bad); }
+.seg { display: flex; } .seg button { border-radius: 0; } .seg button:first-child { border-radius: 6px 0 0 6px; }
+.seg button:last-child { border-radius: 0 6px 6px 0; }
+.seg button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+.muted { color: var(--muted); font-size: 13px; }

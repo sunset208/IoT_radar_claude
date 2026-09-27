@@ -1,0 +1,38 @@
+# IoT_radar — Python dependencies (install in repo-root .venv).
+#   python -m venv .venv && source .venv/bin/activate
+#   pip install -r requirements.txt
+#
+# PyTorch: this pin matches the project venv (CUDA 13.0 wheel). For CPU-only or
+# another CUDA version, see https://pytorch.org/get-started/locally/
+# Full freeze: python -m pip freeze > requirements-lock.txt
+
+# --- Core (MicroDopplerDetection + AICalibration) ---
+numpy==2.4.4
+scipy==1.17.1
+matplotlib==3.10.8
+PyYAML==6.0.3
+tqdm==4.68.1
+
+# --- Deep learning (AICalibration) ---
+torch==2.11.0
+
+# --- PlutoSDR / streaming radar (MicroDopplerDetection) ---
+pyadi-iio==0.0.20
+pylibiio==0.25
+
+# --- Notebooks (AICalibration/inference.ipynb) ---
+ipykernel==7.2.0
+
+# --- Launcher UI (accueil_pg.py) ---
+pygame==2.6.1
+
+# --- matplotlib stack (transitive pins for reproducibility) ---
+contourpy==1.3.3
+cycler==0.12.1
+fonttools==4.62.0
+kiwisolver==1.5.0
+packaging==26.0
+pillow==12.2.0
+pyparsing==3.3.2
+python-dateutil==2.9.0.post0
+six==1.17.0

@@ -1,0 +1,2 @@
+01:39:20 [INFO] radar.dsp.frontend — Frontend : 1000000 Hz → CIC2(R=100) → 10×10×2 → 50.0 Hz (f_offset=10000 Hz)
+01:39:20 [INFO] radar.web.server — Tableau de bord : http://127.0.0.1:8050

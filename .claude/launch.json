@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "radar-sim",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
+      "runtimeArgs": ["IoT_radar_v2/radar_cli.py", "run", "--source", "sim-rf", "--no-browser"],
+      "port": 8050
+    },
+    {
+      "name": "radar-pluto",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
+      "runtimeArgs": ["IoT_radar_v2/radar_cli.py", "--config", "IoT_radar_v2/configs/lab.yaml", "run", "--source", "pluto", "--calibration", "IoT_radar_v2/calibration/lab_1800.json", "--no-browser"],
+      "port": 8050
+    }
+  ]
+}

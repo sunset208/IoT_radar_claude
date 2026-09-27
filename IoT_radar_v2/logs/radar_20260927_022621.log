@@ -1,0 +1,5 @@
+02:26:21 [INFO] radar.dsp.frontend — Frontend : 1000000 Hz → CIC2(R=100) → 10×10×2 → 50.0 Hz (f_offset=10000 Hz)
+02:26:21 [INFO] radar.web.server — Tableau de bord : http://127.0.0.1:8050
+02:26:22 [INFO] radar.sources.pluto — Pluto : TX cyclique 100000 éch. (10000 Hz), RX 100000 éch./buffer
+02:27:54 [INFO] radar.recorder — Enregistrement → F:\Claude\ProjetS7\IoT_radar_v2\data\recordings\20260927_022754_vide_vide_chambre_1800.npz
+02:29:09 [INFO] radar.recorder — Enregistrement fermé : F:\Claude\ProjetS7\IoT_radar_v2\data\recordings\20260927_022754_vide_vide_chambre_1800.npz (74.6 s)
