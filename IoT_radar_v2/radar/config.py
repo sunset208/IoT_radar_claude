@@ -17,6 +17,14 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG = PROJECT_ROOT / "configs" / "default.yaml"
 SPEED_OF_LIGHT = 299_792_458.0
 
+# Plages de LO (Hz).  Le Pluto Rev.C est livré en AD9363 (325 MHz–3.8 GHz,
+# 20 MHz de bande) ; il se déverrouille en AD9364 (70 MHz–6 GHz, 56 MHz) :
+# voir README, « Passer à 5.8 GHz ».
+CHIP_LO_RANGE = {
+    "ad9363": (325e6, 3.8e9),
+    "ad9364": (70e6, 6.0e9),
+}
+
 
 @dc.dataclass
 class SdrCfg:
@@ -29,6 +37,7 @@ class SdrCfg:
     rx_buffer_size: int = 100_000
     kernel_buffers: int = 16
     disable_tracking: bool = True
+    chip: str = "ad9363"               # ad9363 (d'origine) | ad9364 (déverrouillé)
 
     @property
     def wavelength(self) -> float:
@@ -93,6 +102,56 @@ class FastCfg:
 
 
 @dc.dataclass
+class SfcwCfg:
+    """Mode à fréquence balayée, amplitude seule (voir radar/sfcw/)."""
+    f_start: float = 1.2e9
+    f_step: float = 20e6
+    n_steps: int = 50
+    f_s: float = 4.0e6
+    rf_bandwidth: float = 4.0e6
+    tone_hz: float = 250e3
+    tag_offset_hz: float = 125e3       # LO RX décalé un pas sur deux → buffers périmés repérés
+    rx_buffer_size: int = 1024
+    kernel_buffers: int = 2
+    max_reads: int = 10                # lectures max par pas pour obtenir un buffer frais
+    discard: int = 3                   # buffers jetés d'office (seulement si tag_offset_hz = 0)
+    rx_gain_db: float = 20.0
+    tx_atten_db: float = 0.0
+    amplitude: float = 0.5
+    calib_mode: str = "manual"         # pas de recalibration à chaque saut de LO > 100 MHz
+    zigzag: bool = True                # balayage montant puis descendant (pas de grand saut)
+    bg_tau_s: float = 30.0             # fond adaptatif (MTI) : constante de temps
+    nfft_range: int = 256
+    min_range_m: float = 0.3           # en deçà : fuite / couplage d'antennes
+    max_range_m: float = 0.0           # 0 → portée non ambiguë c/(4·f_step)
+    breath_window_s: float = 20.0
+    hop_s: float = 1.0
+    breath_threshold_db: float = 12.0
+    presence_threshold_db: float = 8.0
+    on_count: int = 3
+    map_span_s: float = 60.0
+    record_dir: str = "data/sfcw"
+
+    @property
+    def freqs(self):
+        import numpy as np
+        return self.f_start + self.f_step * np.arange(self.n_steps)
+
+    @property
+    def f_stop(self) -> float:
+        return self.f_start + self.f_step * (self.n_steps - 1)
+
+    @property
+    def unambiguous_range_m(self) -> float:
+        # mesures réelles (amplitude) : spectre symétrique → c/(4Δf), pas c/(2Δf)
+        return SPEED_OF_LIGHT / (4 * self.f_step)
+
+    @property
+    def resolution_m(self) -> float:
+        return SPEED_OF_LIGHT / (2 * self.f_step * self.n_steps)
+
+
+@dc.dataclass
 class SimulationCfg:
     scenario: str = "breathing"
     realtime: bool = True
@@ -134,6 +193,7 @@ class Config:
     analysis: AnalysisCfg = dc.field(default_factory=AnalysisCfg)
     detector: DetectorCfg = dc.field(default_factory=DetectorCfg)
     fast: FastCfg = dc.field(default_factory=FastCfg)
+    sfcw: SfcwCfg = dc.field(default_factory=SfcwCfg)
     simulation: SimulationCfg = dc.field(default_factory=SimulationCfg)
     recording: RecordingCfg = dc.field(default_factory=RecordingCfg)
     web: WebCfg = dc.field(default_factory=WebCfg)
@@ -195,6 +255,34 @@ class Config:
                 raise ValueError(f"analysis.extra_windows_s : {w} s hors [4, window_s[.")
         if not 0 < e.amplitude <= 1:
             raise ValueError("emission.amplitude doit être dans ]0, 1].")
+        if s.chip not in CHIP_LO_RANGE:
+            raise ValueError(f"sdr.chip = {s.chip!r} : choisir parmi {sorted(CHIP_LO_RANGE)}.")
+        lo, hi = CHIP_LO_RANGE[s.chip]
+        if not lo <= s.f_c <= hi:
+            hint = (" Au-delà de 3.8 GHz il faut déverrouiller le Pluto en AD9364 puis mettre "
+                    "sdr.chip: ad9364 (README, « Passer à 5.8 GHz »)." if s.chip == "ad9363" else "")
+            raise ValueError(f"sdr.f_c = {s.f_c / 1e6:.0f} MHz hors de la plage {s.chip} "
+                             f"({lo / 1e6:.0f}–{hi / 1e6:.0f} MHz).{hint}")
+        self._validate_sfcw()
+
+    def _validate_sfcw(self) -> None:
+        w, s = self.sfcw, self.sdr
+        if w.n_steps < 8 or w.f_step <= 0:
+            raise ValueError("sfcw : n_steps ≥ 8 et f_step > 0 requis.")
+        lo, hi = CHIP_LO_RANGE[s.chip]
+        if w.f_start < lo or w.f_stop > hi:
+            raise ValueError(f"sfcw : balayage {w.f_start / 1e6:.0f}–{w.f_stop / 1e6:.0f} MHz hors de la "
+                             f"plage {s.chip} ({lo / 1e6:.0f}–{hi / 1e6:.0f} MHz).")
+        if w.f_s < 521e3:
+            raise ValueError("sfcw.f_s doit être ≥ 521 kS/s.")
+        for f in (w.tone_hz, w.tone_hz - w.tag_offset_hz):
+            if f <= 0 or abs(w.f_s / f - round(w.f_s / f)) > 1e-9:
+                raise ValueError(f"sfcw : f_s/{f:g} Hz doit être entier (tonalité et tonalité marquée).")
+            per = int(round(w.f_s / f))
+            if w.rx_buffer_size % per:
+                raise ValueError(f"sfcw.rx_buffer_size doit être multiple de {per} (orthogonalité des tons).")
+        if not 0 <= w.tag_offset_hz < w.tone_hz:
+            raise ValueError("sfcw.tag_offset_hz doit être dans [0, tone_hz[.")
 
     def to_dict(self) -> dict[str, Any]:
         return dc.asdict(self)
@@ -239,6 +327,7 @@ _SECTIONS = {
     "analysis": AnalysisCfg,
     "detector": DetectorCfg,
     "fast": FastCfg,
+    "sfcw": SfcwCfg,
     "simulation": SimulationCfg,
     "recording": RecordingCfg,
     "web": WebCfg,

@@ -176,6 +176,9 @@ class Engine:
         self.ml = ml_detector
         self.subscribers: list[Callable[[dict], None]] = []
         self.snapshot: dict = {"status": "starting"}
+        if source.kind == "idle":
+            self.snapshot = {"status": "idle", "message": getattr(source, "message", ""),
+                             "source": source.describe()}
         self.snapshot_id = 0
         self.fast: dict | None = None
         self.history: collections.deque = collections.deque(

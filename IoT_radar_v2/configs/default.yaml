@@ -19,6 +19,7 @@ sdr:
   tx_atten_db: -20           # atténuation TX (négatif).  0 = puissance max (~+7 dBm)
   rx_buffer_size: 100000     # 100 ms à 1 MS/s ; multiple de f_s/f_offset
   kernel_buffers: 16         # buffers DMA côté Pluto (absorbe les à-coups de l'OS)
+  chip: ad9363               # ad9363 (d'origine, 325 MHz–3.8 GHz) | ad9364 (déverrouillé, 70 MHz–6 GHz)
   # Les boucles de tracking de l'AD9363 agissent près du DC et peuvent
   # manger un signal lent : on les coupe (le décalage f_offset nous en protège).
   disable_tracking: true
@@ -82,6 +83,39 @@ fast:
   activity_threshold_db: 8.0 # (calib)
   activity_on_s: 0.3
   activity_hold_s: 2.0       # MOUVEMENT maintenu 2 s après la dernière bouffée
+
+sfcw:
+  # Mode à fréquence balayée, amplitude seule (radar/sfcw/) : `radar sfcw run|bench|record|analyze`.
+  # La phase TX/RX de l'AD936x est aléatoire après chaque saut de LO ; |S_k| ne
+  # l'est pas, et la fuite TX→RX sert de référence interférométrique.
+  # Résolution c/(2·n·Δf), portée non ambiguë c/(4·Δf) (mesures réelles !).
+  f_start: 1.2e9             # antennes d'origine : résonantes ~1.7–2.0 GHz
+  f_step: 20.0e6             # → 3.75 m de portée non ambiguë
+  n_steps: 50                # → 1 GHz, 15 cm de résolution
+  f_s: 4.0e6
+  rf_bandwidth: 4.0e6
+  tone_hz: 250000.0          # tonalité TX en bande de base
+  tag_offset_hz: 125000.0    # LO RX décalé un pas sur deux → buffers périmés reconnus (0 = off)
+  rx_buffer_size: 1024       # multiple de f_s/tone et f_s/(tone − tag)
+  kernel_buffers: 2          # `radar sfcw bench` mesure le meilleur réglage
+  max_reads: 10
+  discard: 3                 # buffers jetés d'office si tag_offset_hz = 0
+  rx_gain_db: 20
+  tx_atten_db: 0             # ≈ 5 mW à 1.8 GHz
+  amplitude: 0.5
+  calib_mode: manual         # sinon calibration de quadrature TX à chaque saut > 100 MHz
+  zigzag: true
+  bg_tau_s: 30.0             # fond adaptatif (MTI)
+  nfft_range: 256
+  min_range_m: 0.3
+  max_range_m: 0.0           # 0 → portée non ambiguë
+  breath_window_s: 20.0
+  hop_s: 1.0
+  breath_threshold_db: 12.0
+  presence_threshold_db: 8.0
+  on_count: 3
+  map_span_s: 60.0
+  record_dir: data/sfcw
 
 simulation:
   scenario: breathing        # empty | breathing | motion | breathing_motion | walker | fan

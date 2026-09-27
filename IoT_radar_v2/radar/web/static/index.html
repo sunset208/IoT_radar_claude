@@ -26,7 +26,7 @@
       <div class="kpi"><span class="kv" id="k-mm">—</span><span class="kl">amplitude (mm)</span></div>
       <div class="kpi exp"><span class="kv" id="k-hr">—</span><span class="kl">cœur (exp.)</span></div>
     </div>
-    <div class="live">
+    <div class="live cw">
       <div class="gauge" id="g-pres">
         <span class="gl">Présence <small>(0.12–1 Hz, 4 s)</small></span>
         <div class="gbar"><div class="gfill"></div><div class="gthr"></div></div>
@@ -42,27 +42,27 @@
     <div class="truth" id="truth"></div>
   </section>
 
-  <section class="card wide">
+  <section class="card wide cw">
     <h2>Mouvement thoracique <span class="unit" id="wave-unit"></span></h2>
     <canvas id="c-wave"></canvas>
   </section>
 
-  <section class="card">
+  <section class="card cw">
     <h2>Spectre (normalisé au plancher local)</h2>
     <canvas id="c-spec"></canvas>
   </section>
 
-  <section class="card">
+  <section class="card cw">
     <h2>Constellation IQ <span class="unit">(centrée)</span></h2>
     <canvas id="c-iq" class="square"></canvas>
   </section>
 
-  <section class="card wide">
+  <section class="card wide cw">
     <h2>Spectrogramme 0–3 Hz <span class="unit">(historique)</span></h2>
     <canvas id="c-wf"></canvas>
   </section>
 
-  <section class="card wide">
+  <section class="card wide cw">
     <h2>Historique <span class="unit">(5 min — confiance, SNR, présence, état)</span></h2>
     <canvas id="c-hist"></canvas>
   </section>
@@ -74,6 +74,10 @@
       <canvas id="c-prof"></canvas>
     </div>
     <canvas id="c-rbins" class="short"></canvas>
+    <div class="rec-row">
+      <button id="sfcw-bg" title="Mémorise le fond actuel comme référence « salle vide » : le profil statique montre alors ce qui a changé">Figer le fond (salle vide)</button>
+      <span class="muted" id="sfcw-stats"></span>
+    </div>
   </section>
 
   <section class="card" id="mr60-card" hidden>
@@ -87,7 +91,7 @@
     <canvas id="c-mr60" class="short"></canvas>
   </section>
 
-  <section class="card">
+  <section class="card cw">
     <h2>Santé du système</h2>
     <table class="health" id="health"></table>
   </section>

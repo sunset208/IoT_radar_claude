@@ -53,6 +53,12 @@ class AppState:
         self.extras: dict = extras or {}
         self.engine = self._new_engine(None)
 
+    def record_target(self):
+        """Moteur qui enregistre : le SFCW quand le moteur CW est au repos."""
+        if self.engine.source.kind == "idle" and "sfcw" in self.extras:
+            return self.extras["sfcw"]
+        return self.engine
+
     def extras_state(self) -> dict:
         out = {}
         for name, ex in self.extras.items():
@@ -133,16 +139,24 @@ def create_app(state: AppState) -> FastAPI:
 
     @app.post("/api/record/start")
     def rec_start(req: RecordReq):
-        path = state.engine.start_recording(req.label, req.tag, req.notes)
+        path = state.record_target().start_recording(req.label, req.tag, req.notes)
         return {"ok": True, "path": path}
 
     @app.post("/api/record/stop")
     def rec_stop():
-        return {"ok": True, "path": state.engine.stop_recording()}
+        return {"ok": True, "path": state.record_target().stop_recording()}
 
     @app.post("/api/annotate")
     def annotate(req: AnnotateReq):
-        state.engine.annotate(req.text)
+        state.record_target().annotate(req.text)
+        return {"ok": True}
+
+    @app.post("/api/sfcw/background")
+    def sfcw_background():
+        sf = state.extras.get("sfcw")
+        if sf is None:
+            return JSONResponse({"ok": False, "error": "mode SFCW inactif"}, status_code=400)
+        sf.freeze_background()
         return {"ok": True}
 
     @app.post("/api/scenario")

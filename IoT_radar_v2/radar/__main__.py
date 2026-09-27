@@ -5,6 +5,8 @@ Commandes
 run         tableau de bord temps réel (Pluto, simulation ou relecture)
 record      enregistrement sans interface (sessions scriptées)
 check       diagnostic matériel (niveaux, fuite, stabilité de phase, débit)
+scan        balayage de fréquences : bruit ambiant (et fuite TX→RX avec --tx)
+sfcw        mode à fréquence balayée : run | bench | record | analyze
 evaluate    métriques du détecteur sur enregistrements ou scénarios simulés
 calibrate   seuils (et régression logistique) à partir d'enregistrements étiquetés
 convert-v1  conversion des .iq de la v1 vers le format v2
@@ -96,8 +98,11 @@ def cmd_run(args) -> int:
         src = _make_source(cfg, kind, scenario or args.scenario, args.file)
         return Engine(cfg, src, cal, ml)
 
+    extras: dict = {}
+    _add_mr60(cfg, args, extras)
     state = AppState(factory, cfg.web.push_hz,
-                     scenarios=list(SCENARIOS) if kind in ("sim", "sim-rf") else None)
+                     scenarios=list(SCENARIOS) if kind in ("sim", "sim-rf") else None,
+                     extras=extras)
     host = args.host or cfg.web.host
     port = args.port or cfg.web.port
     url = f"http://127.0.0.1:{port}"
@@ -193,6 +198,135 @@ def cmd_convert(args) -> int:
     return 0
 
 
+def _sfcw_cfg(args):
+    cfg = load_config(args.config, _overrides(args))
+    s = cfg.sfcw
+    if getattr(args, "gain", None) is not None:
+        s.rx_gain_db = args.gain
+    if getattr(args, "start", None) is not None:
+        s.f_start = args.start
+    if getattr(args, "step", None) is not None:
+        s.f_step = args.step
+    if getattr(args, "steps", None) is not None:
+        s.n_steps = args.steps
+    cfg.validate()
+    return cfg
+
+
+def _sfcw_source(cfg, args, realtime: bool = True):
+    import numpy as np
+    from radar.sfcw.scene import FakePluto, SfcwScene, SfcwSceneParams
+    from radar.sfcw.sources import SfcwPlutoSource, SfcwReplaySource, SfcwSimSource
+    params = SfcwSceneParams(scenario=args.scenario or "breathing",
+                             target_range_m=args.range or 1.2)
+    if args.source == "pluto":
+        return SfcwPlutoSource(cfg)
+    if args.source == "fake":      # vrai code Pluto, matériel simulé
+        rng = np.random.default_rng(cfg.simulation.seed)
+        return SfcwPlutoSource(cfg, sdr=FakePluto(SfcwScene(params, rng), rng=rng))
+    if args.source == "sim":
+        return SfcwSimSource(cfg, params, sweep_hz=args.sweep_hz, realtime=realtime)
+    if args.source == "replay":
+        if not args.file:
+            raise SystemExit("--file requis pour --source replay")
+        return SfcwReplaySource(args.file, realtime=realtime)
+    raise SystemExit(f"source inconnue : {args.source}")
+
+
+def cmd_sfcw(args) -> int:
+    cfg = _sfcw_cfg(args)
+    if args.action == "bench":
+        logging.basicConfig(level=logging.WARNING)
+        from radar.sfcw.bench import run_bench
+        sdr = None
+        if args.source == "fake" or args.sim:
+            import numpy as np
+            from radar.sfcw.scene import FakePluto, SfcwScene
+            sdr = FakePluto(SfcwScene(rng=np.random.default_rng(0)), rng=np.random.default_rng(1))
+        run_bench(cfg, sdr=sdr, repeats=args.repeats, fastlock=args.fastlock)
+        return 0
+    if args.action == "record":
+        _setup_logging(cfg.logging.level, cfg.logging.dir)
+        from radar.sfcw.engine import run_headless
+        src = _sfcw_source(cfg, args, realtime=args.source != "sim")
+        run_headless(cfg, src, args.duration, args.label, args.tag, args.notes, args.out)
+        return 0
+    if args.action == "analyze":
+        logging.basicConfig(level=logging.WARNING)
+        return _sfcw_analyze(cfg, args.paths)
+    # run : tableau de bord, moteur CW au repos + panneau SFCW
+    from radar.pipeline import Engine
+    from radar.sfcw.engine import SfcwEngine
+    from radar.sources.base import IdleSource
+    from radar.web.server import AppState, serve
+    _setup_logging(cfg.logging.level, cfg.logging.dir)
+    sf = SfcwEngine(cfg, _sfcw_source(cfg, args))
+    sf.start()
+    extras = {"sfcw": sf}
+    _add_mr60(cfg, args, extras)
+    state = AppState(lambda _sc: Engine(cfg, IdleSource("MODE SFCW")), cfg.web.push_hz, extras=extras)
+    port = args.port or cfg.web.port
+    url = f"http://127.0.0.1:{port}"
+    if not args.no_browser:
+        threading.Timer(1.5, lambda: webbrowser.open(url)).start()
+    print(f"Tableau de bord SFCW : {url}   (Ctrl+C pour quitter)")
+    serve(state, args.host or cfg.web.host, port)
+    return 0
+
+
+def _sfcw_analyze(cfg, paths) -> int:
+    import numpy as np
+    from radar.offline import find_recordings
+    from radar.sfcw.engine import make_processor
+    from radar.sfcw.sources import SfcwReplaySource
+    files = [p for p in find_recordings(paths or [str(resolve_path(cfg.sfcw.record_dir))])]
+    if not files:
+        print("Aucun enregistrement SFCW.")
+        return 1
+    print(f"{'fichier':40s} {'lab':>3s} {'durée':>6s} {'bal./s':>6s} {'%RESP':>6s} {'%MOUV':>6s} "
+          f"{'%PRÉS':>6s} {'dist. (m)':>9s} {'SNR':>6s} {'resp/min':>8s}")
+    for p in files:
+        try:
+            src = SfcwReplaySource(p, realtime=False, loop=False)
+        except ValueError:
+            continue
+        proc = make_processor(cfg, src.rec.freqs)
+        res = []
+        for sw in src.sweeps():
+            r = proc.push(sw)
+            if r and "state" in r:
+                res.append(r)
+        if not res:
+            print(f"{p.name[:40]:40s} (trop court)")
+            continue
+        st = [r["state"] for r in res]
+        fr = lambda s: 100 * sum(x == s for x in st) / len(st)
+        br = [r for r in res if r["state"] == "RESPIRATION"] or res
+        print(f"{p.name[:40]:40s} {src.rec.label:>3d} {src.rec.duration_s:5.0f}s {proc.sweep_hz:6.2f} "
+              f"{fr('RESPIRATION'):5.1f}% {fr('MOUVEMENT'):5.1f}% {fr('PRESENCE'):5.1f}% "
+              f"{np.median([r['best_range_m'] for r in br]):9.2f} "
+              f"{np.median([r['best_snr_db'] for r in br]):6.1f} {np.median([r['best_bpm'] for r in br]):8.1f}")
+    return 0
+
+
+def _add_mr60(cfg, args, extras: dict) -> None:
+    """Module radar 60 GHz série (--mr60 PORT), affiché à côté du Pluto."""
+    port = getattr(args, "mr60", None)
+    if not port:
+        return
+    from radar.mmwave import MmWaveReader
+    rd = MmWaveReader(port, baud=getattr(args, "mr60_baud", 115200))
+    rd.start()
+    extras["mr60"] = rd
+
+
+def cmd_scan(args) -> int:
+    from radar.hwcheck import run_scan
+    cfg = load_config(args.config, _overrides(args))
+    logging.basicConfig(level=logging.WARNING)
+    return run_scan(cfg, args.start, args.stop, args.step, tx=args.tx)
+
+
 # ----------------------------------------------------------------------
 
 def main(argv=None) -> int:
@@ -214,6 +348,8 @@ def main(argv=None) -> int:
     r.add_argument("--file", help="enregistrement .npz (replay)")
     r.add_argument("--calibration", help="JSON produit par radar calibrate")
     r.add_argument("--ai", help="modèle IA (.pt) à afficher en parallèle du détecteur classique")
+    r.add_argument("--mr60", help="port série d'un module radar 60 GHz à afficher à côté (ex. COM5)")
+    r.add_argument("--mr60-baud", type=int, default=115200)
     r.add_argument("--host")
     r.add_argument("--port", type=int)
     r.add_argument("--no-browser", action="store_true")
@@ -237,6 +373,43 @@ def main(argv=None) -> int:
     c.add_argument("--stability", type=float, default=0.0, help="durée du test de stabilité (s)")
     c.add_argument("--sim", action="store_true", help="démonstration sur simulateur")
     c.set_defaults(fn=cmd_check)
+
+    sn = sub.add_parser("scan", help="balayage de fréquences (bruit ambiant, fuite TX→RX)")
+    common(sn)
+    sn.add_argument("--start", type=float, default=0.4e9)
+    sn.add_argument("--stop", type=float, default=3.7e9)
+    sn.add_argument("--step", type=float, default=100e6)
+    sn.add_argument("--tx", action="store_true",
+                    help="émettre la tonalité : mesure aussi la fuite TX→RX (réponse des antennes)")
+    sn.set_defaults(fn=cmd_scan)
+
+    sf = sub.add_parser("sfcw", help="mode à fréquence balayée (amplitude seule)")
+    common(sf)
+    sf.add_argument("action", choices=("run", "bench", "record", "analyze"))
+    sf.add_argument("paths", nargs="*", help="(analyze) fichiers .npz SFCW ou dossiers")
+    sf.add_argument("--source", choices=("pluto", "sim", "fake", "replay"), default="pluto",
+                    help="fake = code Pluto réel sur matériel simulé")
+    sf.add_argument("--file", help="(replay) enregistrement SFCW")
+    sf.add_argument("--scenario", help="(sim/fake) breathing | empty | walker | breathing_walker")
+    sf.add_argument("--range", type=float, help="(sim/fake) distance de la cible (m)")
+    sf.add_argument("--sweep-hz", type=float, default=4.0, help="(sim) balayages par seconde")
+    sf.add_argument("--start", type=float, help="1re fréquence (Hz)")
+    sf.add_argument("--step", type=float, help="pas de fréquence (Hz)")
+    sf.add_argument("--steps", type=int, help="nombre de pas")
+    sf.add_argument("--label", type=int, choices=(-1, 0, 1), default=-1)
+    sf.add_argument("--duration", type=float, default=60.0)
+    sf.add_argument("--tag", default="")
+    sf.add_argument("--notes", default="")
+    sf.add_argument("--out", help="dossier de sortie (record)")
+    sf.add_argument("--repeats", type=int, default=10, help="(bench) balayages de répétabilité")
+    sf.add_argument("--fastlock", action="store_true", help="(bench) tester le fastlock")
+    sf.add_argument("--sim", action="store_true", help="(bench) sur le faux Pluto")
+    sf.add_argument("--mr60", help="(run) port série d'un module radar 60 GHz (ex. COM5)")
+    sf.add_argument("--mr60-baud", type=int, default=115200)
+    sf.add_argument("--host")
+    sf.add_argument("--port", type=int)
+    sf.add_argument("--no-browser", action="store_true")
+    sf.set_defaults(fn=cmd_sfcw)
 
     e = sub.add_parser("evaluate", help="métriques du détecteur")
     common(e)

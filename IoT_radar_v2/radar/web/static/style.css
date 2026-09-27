@@ -14,6 +14,7 @@
   }
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body { margin: 0; background: var(--bg); color: var(--text);
   font: 14px/1.4 "Segoe UI", system-ui, -apple-system, sans-serif; }
 header { display: flex; justify-content: space-between; align-items: center;
@@ -98,3 +99,6 @@ button.primary.rec { background: var(--bad); border-color: var(--bad); }
 .seg button:last-child { border-radius: 0 6px 6px 0; }
 .seg button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
 .muted { color: var(--muted); font-size: 13px; }
+
+body.mode-sfcw .cw { display: none !important; }
+body.mode-sfcw #sfcw-card { grid-column: 1 / -1; }

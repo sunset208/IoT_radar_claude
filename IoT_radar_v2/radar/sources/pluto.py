@@ -73,24 +73,79 @@ def _set_attr(sdr, chan: str, attr: str, value, output: bool = False) -> bool:
         return False
 
 
-def open_pluto(cfg: Config):
-    """Ouvre et configure le Pluto.  Lève RuntimeError avec un message utile."""
+def connect_pluto(uri: str):
+    """Connexion pyadi-iio.  Lève RuntimeError avec un message utile."""
     ensure_libiio_on_path()
     try:
         import adi  # noqa: WPS433
     except Exception as exc:
         raise RuntimeError(f"pyadi-iio/libiio indisponible : {exc}") from exc
-    s = cfg.sdr
     try:
-        sdr = adi.Pluto(s.uri)
+        return adi.Pluto(uri)
     except Exception as exc:
         raise RuntimeError(
-            f"PlutoSDR injoignable à '{s.uri}' ({exc}).\n"
+            f"PlutoSDR injoignable à '{uri}' ({exc}).\n"
             "  • Brancher le micro-USB « USB » (données), pas celui marqué « Power ».\n"
-            "  • Sous Windows : installer les drivers « PlutoSDR-M2k-USB-Drivers » d'ADI\n"
-            "    (interface réseau RNDIS 192.168.2.1 et accès usb:).\n"
+            "  • Sous Windows 11 : interface réseau NCM native (usb_ethernet_mode = ncm dans\n"
+            "    config.txt du Pluto) ou drivers « PlutoSDR-M2k-USB-Drivers » d'ADI (RNDIS).\n"
             "  • Tester : radar check  (liste les contextes IIO visibles)."
         ) from exc
+
+
+def lo_range(sdr) -> tuple[float, float] | None:
+    """Plage de LO annoncée par le firmware (« [min pas max] »), ou None."""
+    try:
+        ch = sdr._ctrl.find_channel("altvoltage0", True)
+        v = ch.attrs["frequency_available"].value.strip("[] \n").split()
+        return float(v[0]), float(v[-1])
+    except Exception:
+        return None
+
+
+def check_lo(sdr, freqs_hz) -> None:
+    """Vérifie que les fréquences demandées sont accessibles (AD9363 ou AD9364)."""
+    rng = lo_range(sdr)
+    if rng is None:
+        return
+    lo, hi = rng
+    bad = [f for f in np.atleast_1d(freqs_hz) if not lo <= f <= hi]
+    if bad:
+        raise RuntimeError(
+            f"Fréquence {bad[0] / 1e6:.0f} MHz hors de la plage du Pluto "
+            f"({lo / 1e6:.0f}–{hi / 1e6:.0f} MHz).  Pour aller au-delà de 3.8 GHz : déverrouiller "
+            "en AD9364 (README, « Passer à 5.8 GHz ») puis sdr.chip: ad9364.")
+
+
+def disable_tracking(sdr) -> None:
+    """Boucles adaptatives DC / quadrature de l'AD936x coupées (elles agissent près du DC)."""
+    for attr in ("quadrature_tracking_en", "rf_dc_offset_tracking_en", "bb_dc_offset_tracking_en"):
+        _set_attr(sdr, "voltage0", attr, 0)
+
+
+def set_kernel_buffers(sdr, n: int) -> None:
+    try:
+        sdr._rxadc.set_kernel_buffers_count(int(n))
+    except Exception as exc:
+        logger.debug("set_kernel_buffers_count indisponible : %s", exc)
+
+
+def set_calib_mode(sdr, mode: str) -> str | None:
+    """Règle ``calib_mode`` (auto | manual…) ; renvoie l'ancienne valeur."""
+    try:
+        a = sdr._ctrl.attrs["calib_mode"]
+        old = a.value.strip()
+        a.value = mode
+        return old
+    except Exception as exc:
+        logger.warning("calib_mode non réglé (%s) : le driver peut recalibrer à chaque saut de LO.", exc)
+        return None
+
+
+def open_pluto(cfg: Config):
+    """Ouvre et configure le Pluto (mode CW).  Lève RuntimeError avec un message utile."""
+    s = cfg.sdr
+    sdr = connect_pluto(s.uri)
+    check_lo(sdr, [s.f_c])
     sdr.sample_rate = int(s.f_s)
     sdr.rx_rf_bandwidth = int(s.rf_bandwidth)
     sdr.tx_rf_bandwidth = int(s.rf_bandwidth)
@@ -101,12 +156,8 @@ def open_pluto(cfg: Config):
     sdr.tx_hardwaregain_chan0 = float(s.tx_atten_db)
     sdr.rx_buffer_size = int(s.rx_buffer_size)
     if s.disable_tracking:
-        for attr in ("quadrature_tracking_en", "rf_dc_offset_tracking_en", "bb_dc_offset_tracking_en"):
-            _set_attr(sdr, "voltage0", attr, 0)
-    try:
-        sdr._rxadc.set_kernel_buffers_count(int(s.kernel_buffers))
-    except Exception as exc:
-        logger.debug("set_kernel_buffers_count indisponible : %s", exc)
+        disable_tracking(sdr)
+    set_kernel_buffers(sdr, s.kernel_buffers)
     return sdr
 
 

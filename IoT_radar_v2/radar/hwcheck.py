@@ -243,3 +243,65 @@ def _hint_windows() -> None:
     _p("   • Installer « PlutoSDR-M2k-USB-Drivers.exe » (ADI) : carte réseau RNDIS")
     _p("     192.168.2.1 + accès libusb pour uri « usb: ».")
     _p("   • Le lecteur « PlutoSDR » (clé USB) doit apparaître dans l'explorateur.")
+
+
+def run_scan(cfg: Config, start: float, stop: float, step: float, tx: bool = False) -> int:
+    """``radar scan`` : bruit ambiant (et, avec --tx, fuite TX→RX) sur une plage de fréquences.
+
+    Sans émission : médiane et maximum de la puissance reçue par tranches de
+    1 ms (brouilleurs : Wi-Fi, BT, réseau mobile, drones FPV à 5.8 GHz…).
+    Avec --tx : niveau de la tonalité reçue = couplage TX→RX, qui suit la
+    réponse des antennes.  Pour choisir sdr.f_c (bande calme où les antennes
+    marchent) — indispensable avant de passer à 5.8 GHz.
+    """
+    from radar.sources.pluto import lo_range, make_tx_waveform, open_pluto
+    sdr = open_pluto(cfg)
+    rng = lo_range(sdr)
+    if rng:
+        _p(f"Plage LO du firmware : {rng[0] / 1e6:.0f}–{rng[1] / 1e6:.0f} MHz")
+        start, stop = max(start, rng[0]), min(stop, rng[1])
+    if tx:
+        wav = make_tx_waveform(cfg.sdr.f_s, cfg.emission.f_offset, cfg.sdr.rx_buffer_size,
+                               cfg.emission.amplitude)
+        sdr.tx_cyclic_buffer = True
+        sdr.tx(wav)
+    else:
+        sdr.tx_hardwaregain_chan0 = -89.75          # émetteur au minimum
+    _p(f"{'MHz':>7s} {'médiane':>8s} {'max':>7s}" + (f" {'fuite':>7s}" if tx else "") + "  (dBFS)")
+    rows = []
+    try:
+        for f in np.arange(start, stop + 1, step):
+            sdr.rx_lo = int(f)
+            if tx:
+                sdr.tx_lo = int(f)
+            for _ in range(2):
+                sdr.rx()
+            p_med, p_max, tone = [], [], []
+            for _ in range(4):
+                raw = np.asarray(sdr.rx(), dtype=np.complex128)
+                pw = np.abs(raw / ADC_FULL_SCALE) ** 2
+                seg = pw[: len(pw) // 1000 * 1000].reshape(-1, 1000).mean(axis=1)
+                p_med.append(np.median(seg))
+                p_max.append(seg.max())
+                if tx:
+                    tone.append(_tone_dbfs(raw, cfg.sdr.f_s, cfg.emission.f_offset))
+            med = 10 * math.log10(float(np.median(p_med)) + 1e-15)
+            mx = 10 * math.log10(float(np.max(p_max)) + 1e-15)
+            line = f"{f / 1e6:7.0f} {med:8.1f} {mx:7.1f}"
+            if tx:
+                line += f" {np.median(tone):7.1f}"
+            flag = "  ← brouilleur" if mx - med > 10 else ""
+            _p(line + flag)
+            rows.append((f, med, mx, float(np.median(tone)) if tx else None))
+    finally:
+        try:
+            sdr.tx_destroy_buffer()
+        except Exception:
+            pass
+    quiet = [r for r in rows if r[2] - r[1] < 6]
+    if tx and quiet:
+        best = max(quiet, key=lambda r: r[3])
+        _p(f"\nFréquence calme au meilleur couplage d'antennes : {best[0] / 1e6:.0f} MHz "
+           f"(fuite {best[3]:.1f} dBFS).  Attention : un fort couplage = forte fuite ; "
+           "c'est la réponse des antennes qui compte, pas le niveau absolu.")
+    return 0

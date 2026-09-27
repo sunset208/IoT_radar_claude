@@ -60,3 +60,22 @@ class Throttle:
         dt = self.t_start + t_signal - time.monotonic()
         if dt > 0:
             time.sleep(dt)
+
+
+class IdleSource(Source):
+    """Source muette : le moteur CW reste au repos (mode SFCW du tableau de bord)."""
+
+    kind = "idle"
+
+    def __init__(self, message: str = "") -> None:
+        super().__init__()
+        self.message = message
+
+    def _iter(self) -> Iterator[Chunk]:
+        while not self._stop:
+            time.sleep(0.2)
+        return
+        yield  # pragma: no cover
+
+    def describe(self) -> dict:
+        return {"kind": self.kind, "message": self.message}

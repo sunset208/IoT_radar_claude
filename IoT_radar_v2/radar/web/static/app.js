@@ -242,8 +242,8 @@ function setStatus(snap) {
     return;
   }
   if (snap.status === "idle") {
-    card.className = "status card"; $("state").textContent = snap.message || "EN ATTENTE";
-    $("state-sub").textContent = ""; return;
+    if (!extras.sfcw) { card.className = "status card"; $("state").textContent = snap.message || "EN ATTENTE"; }
+    return;
   }
   const d = snap.decision; if (!d) return;
   if (!fast) setState(d.state);
@@ -269,6 +269,7 @@ function setStatus(snap) {
 }
 
 function setHealth(snap) {
+  if (snap.status === "idle") return;        // mode SFCW : santé dans le panneau SFCW
   const st = snap.stats || {}, f = snap.decision ? snap.decision.features : {};
   const rows = [];
   const cls = (v, w, b) => v >= b ? "bad" : v >= w ? "warn" : "good";
@@ -293,7 +294,7 @@ function setHealth(snap) {
 }
 
 function setSource(snap, scenarios) {
-  const s = snap && snap.source; if (!s) return;
+  const s = snap && snap.source; if (!s || s.kind === "idle") return;
   let t = s.kind;
   if (s.scenario) t += ` · scénario « ${s.scenario} »`;
   if (s.uri) t += ` · ${s.uri} · ${(s.f_c / 1e9).toFixed(2)} GHz · RX ${s.rx_gain_db} dB`;
@@ -310,6 +311,24 @@ function setSource(snap, scenarios) {
 // ---------------------------------------------------------------- panneaux annexes
 function drawSfcw(sf) {
   $("sfcw-card").hidden = false;
+  const sfcwMode = last && last.status === "idle";
+  document.body.classList.toggle("mode-sfcw", !!sfcwMode);
+  if (sfcwMode) sfcwStatus(sf);
+  const st = sf.stats || {};
+  const bits = [];
+  if (st.reads_per_step) bits.push(`${st.reads_per_step.toFixed(1)} lectures/pas`);
+  if (st.adc_peak_dbfs !== undefined) bits.push(`crête ADC ${st.adc_peak_dbfs.toFixed(1)} dBFS`);
+  if (st.timeouts) bits.push(`${st.timeouts} pas ratés`);
+  if (sf.static_ref) bits.push("fond figé");
+  if (sfcwMode && sf.source) {
+    const so = sf.source;
+    let t = so.kind;
+    if (so.scenario) t += ` · scénario « ${so.scenario} »`;
+    if (so.uri) t += ` · ${so.uri} · RX ${so.rx_gain_db} dB`;
+    if (so.file) t += ` · ${so.file.split(/[\\/]/).pop()}`;
+    $("src-desc").textContent = t;
+  }
+  $("sfcw-stats").textContent = bits.join(" · ");
   const info = [];
   if (sf.status && sf.status !== "running") info.push(sf.status);
   if (sf.sweep_hz) info.push(`${sf.sweep_hz.toFixed(1)} balayages/s`);
@@ -348,6 +367,29 @@ function drawSfcw(sf) {
     }
     g.fillStyle = css("--muted"); g.textAlign = "left"; g.fillText("SNR respiratoire par case de distance (dB)", fr.L + 4, fr.T + 12);
   }
+}
+
+// mode SFCW : la carte d'état résume la décision distance × temps
+function sfcwStatus(sf) {
+  setState(sf.state || "VIDE");
+  const sub = [];
+  if (sf.state === "RESPIRATION" && sf.best_range_m != null) sub.push(`cible à ${sf.best_range_m.toFixed(2)} m`);
+  if (sf.motion_extent_m) sub.push(`mouvement entre ${sf.motion_extent_m[0].toFixed(1)} et ${sf.motion_extent_m[1].toFixed(1)} m`);
+  if (sf.status === "error") sub.push("⚠ " + (sf.error || "erreur"));
+  $("state-sub").textContent = sub.join(" · ");
+  $("k-bpm").textContent = sf.state === "RESPIRATION" && sf.best_bpm ? sf.best_bpm.toFixed(1) : "—";
+  $("k-score").textContent = sf.sweep_hz ? sf.sweep_hz.toFixed(1) : "—";
+  $("k-score").nextElementSibling.textContent = "balayages/s";
+  $("k-snr").textContent = sf.best_snr_db != null ? sf.best_snr_db.toFixed(1) : "—";
+  $("k-mm").textContent = sf.best_range_m != null ? sf.best_range_m.toFixed(2) : "—";
+  $("k-mm").nextElementSibling.textContent = "distance (m)";
+  $("k-hr").textContent = sf.resolution_m ? (100 * sf.resolution_m).toFixed(0) : "—";
+  $("k-hr").nextElementSibling.textContent = "résolution (cm)";
+  const rec = sf.recording;
+  recording = !!rec;
+  $("rec-btn").textContent = rec ? "■ Arrêter" : "● Démarrer";
+  $("rec-btn").classList.toggle("rec", !!rec);
+  $("rec-info").textContent = rec ? `${rec.path} — ${rec.elapsed_s.toFixed(0)} s` : "";
 }
 
 let mr60Hist = [];
@@ -463,6 +505,7 @@ $("rec-btn").onclick = async () => {
   else await post("/api/record/start", { label: recLabel, tag: $("rec-tag").value, notes: $("rec-notes").value });
 };
 document.querySelectorAll(".annots button").forEach((b) => b.onclick = () => post("/api/annotate", { text: b.dataset.a }));
+$("sfcw-bg").onclick = () => post("/api/sfcw/background");
 $("scen").onchange = async (e) => { hist = []; wf = []; await post("/api/scenario", { scenario: e.target.value }); };
 window.addEventListener("resize", () => { requestAnimationFrame(renderAnalysis); if (extras) setExtras(extras); });
 connect();
