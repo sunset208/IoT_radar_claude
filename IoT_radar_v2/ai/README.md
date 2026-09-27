@@ -31,10 +31,30 @@ Le `best.pt` v1 n'est pas réutilisable avec la nouvelle entrée.
 Vérifié sans entraînement : `python ai/train.py pretrain --check` (un seul
 passage avant, aucun poids modifié).
 
+### Corrections du 27/09 (nuit)
+
+* **Semi-synthétique** : la cible simulée ajoutée aux fonds vides réels
+  utilisait la longueur d'onde de `ai/config.yaml` (3.5 GHz) alors que les fonds
+  sont enregistrés à 1.8 GHz : profondeur de modulation fausse d'un facteur 2.
+  La porteuse de chaque enregistrement (métadonnées) est maintenant utilisée.
+* **Synthétique** : λ tirée parmi 1.8 / 2.45 / 5.8 GHz (`data.wavelength` est
+  une liste) → le même modèle vaut après le passage à 5.8 GHz.
+* **Sélection du modèle** : en pré-entraînement, elle se fait sur la
+  validation synthétique.  Avant, dès qu'une validation réelle existait, elle
+  servait de critère ; or avec 6 sessions le tirage peut n'y mettre que des
+  positifs → AUC NaN → **aucun `best.pt` n'était sauvegardé**.
+* **Vérité terrain du rythme** : si un module 60 GHz était branché pendant
+  l'enregistrement (`<fichier>.mr60.json`), son rythme sert d'étiquette à la
+  tête « rythme ».
+* Les enregistrements SFCW (autre format) sont ignorés proprement.
+
 ## Marche à suivre sur la machine d'entraînement (5090)
 
 ```bat
 :: 0. données : enregistrements v2 dans data\recordings (+ v1 convertis)
+::    le plus utile : des séances guidées (≥ 3 « vide » et ≥ 3 « respiration »)
+radar.bat --config configs\lab.yaml protocole --plan vide_long
+radar.bat --config configs\lab.yaml protocole --plan labo --mr60 COM5
 radar.bat convert-v1 <ancien AICalibration\data>
 
 :: 1. pré-entraînement sur simulateur (quelques dizaines de minutes au plus)

@@ -228,7 +228,7 @@ def main() -> int:
 
     eval_every = 1000 if args.stage == "pretrain" else st["steps_per_epoch"]
     best, best_state, bad = -1.0, None, 0
-    run_loss, step = 0.0, 0
+    run_loss, step, n_run = 0.0, 0, 0
     t0 = time.time()
     model.train()
     for x, y, r in loader:
@@ -241,27 +241,37 @@ def main() -> int:
         nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         opt.step()
         sched.step()
-        run_loss += float(loss)
+        run_loss += float(loss.detach())
+        n_run += 1
         step += 1
         if step % eval_every == 0 or step == total:
             res = {k: metrics(*predict(model, v, dev, tr["amp"]), tr["pfa_target"])
                    for k, v in val_loaders.items()}
             model.train()
-            key = "real" if "real" in res else "synth"
+            # Sélection du modèle : sur le synthétique en pré-entraînement (le réel
+            # y est minuscule) ; sur le réel en affinage, s'il est défini (une
+            # validation réelle sans négatif donne une AUC NaN → aucun modèle
+            # n'aurait jamais été sauvegardé).
+            key = "synth"
+            if args.stage == "finetune" and "real" in res and math.isfinite(res["real"]["auc"]):
+                key = "real"
             score = res[key]["auc"]
-            print(f"step {step:6d}/{total}  loss {run_loss / eval_every:.4f}  "
+            if not math.isfinite(score):
+                score = -0.5
+            print(f"step {step:6d}/{total}  loss {run_loss / max(n_run, 1):.4f}  "
                   + "  ".join(f"{k}: AUC {m['auc']:.3f} Pd@{tr['pfa_target']:.0%} {m['pd_at_pfa']:.2f}"
                               for k, m in res.items())
                   + f"  ({time.time() - t0:.0f} s)", flush=True)
-            hw.writerow([step, run_loss / eval_every, sched.get_last_lr()[0],
+            hw.writerow([step, run_loss / max(n_run, 1), sched.get_last_lr()[0],
                          res["synth"]["auc"], res.get("real", {}).get("auc"),
                          res.get("real", {}).get("pd_at_pfa")])
             hist_f.flush()
-            run_loss = 0.0
+            run_loss, n_run = 0.0, 0
             if score > best:
                 best, bad = score, 0
                 best_state = copy.deepcopy(_unwrap(model).state_dict())
                 torch.save({"model": best_state, "config": cfg, "step": step, "metrics": res,
+                            "selected_on": key,
                             "threshold": res[key]["threshold"],
                             "preprocess": {"fs": fs, "window_s": win}}, out / "best.pt")
             else:

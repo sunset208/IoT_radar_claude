@@ -13,7 +13,7 @@ import time
 import numpy as np
 
 from radar.config import Config, resolve_path
-from radar.sfcw.dsp import SfcwProcessor, Sweep
+from radar.sfcw.dsp import SfcwProcessor
 from radar.sfcw.sources import SfcwRecorder, SfcwSource
 
 logger = logging.getLogger(__name__)

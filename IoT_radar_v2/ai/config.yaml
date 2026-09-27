@@ -8,7 +8,10 @@ data:
   fs: 50.0                   # doit correspondre à frontend.fs_slow des enregistrements
   window_s: 20.0             # même fenêtre que le détecteur classique (comparaison équitable)
   hop_s: 2.0                 # pas entre fenêtres réelles (recouvrement 90 %)
-  wavelength: 0.0856549      # λ = c / f_c (3.5 GHz)
+  # λ = c/f_c.  Liste → tirée au hasard pour chaque simulation (le modèle sert
+  # à 1.8 GHz aujourd'hui, à 5.8 GHz après le déverrouillage AD9364).  Le
+  # semi-synthétique utilise, lui, la porteuse réelle de chaque fond enregistré.
+  wavelength: [0.16655, 0.12236, 0.05169]   # 1.8, 2.45, 5.8 GHz
   recordings: [data/recordings, data/v1_converted]
   val_frac: 0.25             # fraction des *sessions* en validation (jamais de fenêtres)
 

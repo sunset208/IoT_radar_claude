@@ -40,6 +40,21 @@ from radar.scene import (  # noqa: E402
 from radar.sources.simulation import SimulatedSlowSource  # noqa: E402
 
 
+def _pick_lam(lam, rng) -> float:
+    """λ fixe ou tirée dans une liste (randomisation de domaine sur la porteuse)."""
+    if isinstance(lam, (list, tuple)):
+        return float(lam[int(rng.integers(len(lam)))])
+    return float(lam)
+
+
+def recording_wavelength(rec, default: float) -> float:
+    """λ réelle d'un enregistrement (porteuse sdr.f_c des métadonnées)."""
+    try:
+        return 299_792_458.0 / float(rec.meta["config"]["sdr"]["f_c"])
+    except (KeyError, TypeError, ValueError, ZeroDivisionError):
+        return default
+
+
 def _item(x: np.ndarray, fs: float, y: float, rate_hz: float | None):
     return (torch.from_numpy(preprocess(x, fs)), torch.tensor(float(y)),
             torch.tensor(float(rate_hz or 0.0)))
@@ -47,7 +62,7 @@ def _item(x: np.ndarray, fs: float, y: float, rate_hz: float | None):
 
 # ----------------------------------------------------------------------
 class SyntheticWindows(IterableDataset):
-    def __init__(self, fs: float, window_s: float, wavelength: float, seed: int = 0,
+    def __init__(self, fs: float, window_s: float, wavelength, seed: int = 0,
                  scenario_weights: dict[str, float] | None = None, sim_len_s: float = 90.0) -> None:
         self.fs, self.window_s, self.lam, self.seed = fs, window_s, wavelength, seed
         w = scenario_weights or {s: 1.0 for s in SCENARIOS}
@@ -63,7 +78,7 @@ class SyntheticWindows(IterableDataset):
         n_win = int(round(self.window_s * self.fs))
         while True:
             sc = str(rng.choice(self.scen, p=self.p))
-            params = random_scene_params(rng, self.lam, sc)
+            params = random_scene_params(rng, _pick_lam(self.lam, rng), sc)
             scene = Scene(params, rng)
             src = SimulatedSlowSource(self.fs, scene, rng=rng)
             src.generate(int(self.fs))                     # préchauffe
@@ -94,7 +109,10 @@ class RecordingWindows(Dataset):
         self.labels: list[int] = []
         self.window_s = window_s
         for p in paths:
-            rec = load_recording(p)
+            try:
+                rec = load_recording(p)
+            except Exception:           # enregistrement SFCW ou fichier étranger : ignoré
+                continue
             if rec.label not in labels:
                 continue
             if fs_expected and abs(rec.fs_slow - fs_expected) > 1e-6:
@@ -119,10 +137,18 @@ class RecordingWindows(Dataset):
         n = int(round(self.window_s * rec.fs_slow))
         return segs[si][a:a + n], rec.fs_slow, rec.label
 
+    def rate_bpm(self, ri: int) -> float | None:
+        """Vérité terrain du rythme : simulation, sinon module 60 GHz enregistré à côté."""
+        rec = self.recs[ri][0]
+        rate = (rec.meta.get("truth") or {}).get("breath_rate_bpm")
+        if rate is None and rec.path is not None:
+            from radar.offline import reference_bpm
+            rate = reference_bpm(rec.path)
+        return rate
+
     def __getitem__(self, i: int):
         x, fs, y = self.raw(i)
-        rec = self.recs[self.items[i][0]][0]
-        rate = (rec.meta.get("truth") or {}).get("breath_rate_bpm")
+        rate = self.rate_bpm(self.items[i][0])
         return _item(x, fs, y, rate / 60.0 if (rate and y) else None)
 
 
@@ -130,7 +156,7 @@ class RecordingWindows(Dataset):
 class SemiSyntheticWindows(IterableDataset):
     """Fonds réels (label 0) + écho humain simulé (positifs) ou rien (négatifs)."""
 
-    def __init__(self, empty_paths: list[Path], window_s: float, wavelength: float,
+    def __init__(self, empty_paths: list[Path], window_s: float, wavelength,
                  p_positive: float = 0.5, seed: int = 0) -> None:
         self.bg = RecordingWindows(empty_paths, window_s, hop_s=1.0, labels=(0,))
         if len(self.bg) == 0:
@@ -141,10 +167,13 @@ class SemiSyntheticWindows(IterableDataset):
         info = get_worker_info()
         rng = np.random.default_rng(self.seed + 104729 * (info.id if info else 0)
                                     + int(torch.initial_seed() % 100000))
-        k = 4 * math.pi / self.lam
         while True:
-            x, fs, _ = self.bg.raw(int(rng.integers(len(self.bg))))
+            i = int(rng.integers(len(self.bg)))
+            x, fs, _ = self.bg.raw(i)
             x = x.astype(np.complex128)
+            # la cible simulée doit l'être à la porteuse du fond réel (1.8 GHz le 27/09)
+            rec = self.bg.recs[self.bg.items[i][0]][0]
+            k = 4 * math.pi / recording_wavelength(rec, _pick_lam(self.lam, rng))
             if rng.random() < self.p_pos:
                 t = np.arange(len(x)) / fs
                 rate = float(rng.uniform(7, 40))
