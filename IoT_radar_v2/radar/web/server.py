@@ -10,6 +10,7 @@ import asyncio
 import json
 import logging
 import threading
+import time
 from pathlib import Path
 from typing import Callable
 
@@ -51,7 +52,21 @@ class AppState:
         # sources annexes affichées à côté du Pluto (module 60 GHz, SFCW…) :
         # objets avec .state() -> dict JSON et .version (int croissant)
         self.extras: dict = extras or {}
+        self.rec_t0: float | None = None
         self.engine = self._new_engine(None)
+
+    def save_aux(self, path: str | None) -> None:
+        """Mesures du module 60 GHz pendant l'enregistrement → <fichier>.mr60.json
+        (référence de rythme pour `radar evaluate`)."""
+        mr = self.extras.get("mr60")
+        if not path or mr is None or self.rec_t0 is None:
+            return
+        try:
+            rows = mr.window(self.rec_t0, time.time())
+            with open(Path(path).with_suffix(".mr60.json"), "w", encoding="utf-8") as fh:
+                json.dump({"model": mr.model, "port": mr.port, "rows": rows}, fh, ensure_ascii=False)
+        except Exception:
+            logger.warning("Mesures 60 GHz non sauvegardées", exc_info=True)
 
     def record_target(self):
         """Moteur qui enregistre : le SFCW quand le moteur CW est au repos."""
@@ -140,11 +155,14 @@ def create_app(state: AppState) -> FastAPI:
     @app.post("/api/record/start")
     def rec_start(req: RecordReq):
         path = state.record_target().start_recording(req.label, req.tag, req.notes)
+        state.rec_t0 = time.time()
         return {"ok": True, "path": path}
 
     @app.post("/api/record/stop")
     def rec_stop():
-        return {"ok": True, "path": state.record_target().stop_recording()}
+        path = state.record_target().stop_recording()
+        state.save_aux(path)
+        return {"ok": True, "path": path}
 
     @app.post("/api/annotate")
     def annotate(req: AnnotateReq):

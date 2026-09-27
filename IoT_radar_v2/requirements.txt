@@ -7,6 +7,7 @@ pylibiio==0.25
 fastapi>=0.115
 uvicorn[standard]>=0.30
 pytest>=8
+pyserial>=3.5         # module radar 60 GHz (radar run --mr60 COMx)
 
 # IA (ai/) — sur la machine d'entraînement :
 #   pip install torch --index-url https://download.pytorch.org/whl/cu130

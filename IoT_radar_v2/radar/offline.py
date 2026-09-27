@@ -224,10 +224,24 @@ def evaluate_recordings(paths: list[Path], cfg: Config, calibration: dict | None
             empty = None
             if truth.get("scenario"):
                 empty = truth["scenario"] == "empty"
+            true_bpm = truth.get("breath_rate_bpm") or reference_bpm(p)
             rows.append(evaluate_sequence(
                 seg, rec.fs_slow, cfg, rec.label, p.stem + (f"#{k}" if k else ""), calibration,
-                truth.get("breath_rate_bpm"), empty_scene=empty))
+                true_bpm, empty_scene=empty))
     return rows
+
+
+def reference_bpm(path: Path) -> float | None:
+    """Rythme de référence du module 60 GHz enregistré à côté (<fichier>.mr60.json)."""
+    side = Path(path).with_suffix(".mr60.json")
+    if not side.is_file():
+        return None
+    try:
+        rows = json.loads(side.read_text(encoding="utf-8")).get("rows", [])
+        v = [r["breath_bpm"] for r in rows if r.get("breath_bpm")]
+        return float(np.median(v)) if v else None
+    except Exception:
+        return None
 
 
 def evaluate_simulation(cfg: Config, n_per: int = 3, duration_s: float = 120.0,
