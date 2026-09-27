@@ -444,3 +444,98 @@ def find_recordings(root_or_files: list[str]) -> list[Path]:
 
 def fmt_pct(v) -> str:
     return "—" if v is None or (isinstance(v, float) and math.isnan(v)) else f"{100 * v:.1f} %"
+
+
+# ----------------------------------------------------------------------
+# Phase ou micro-Doppler ? (rapport §9.11)
+# ----------------------------------------------------------------------
+
+DETECTORS = {"A1": "phase linéarisée (en service)", "A2": "vraie phase (arc-tangente)",
+             "B1": "micro-Doppler (centroïde)", "B2": "Doppler instantané dφ/dt"}
+
+
+def _compare_seq(x: np.ndarray, fs: float, wavelength: float, window_s: float = 20.0,
+                 step_s: float = 1.0) -> list[dict]:
+    from radar.dsp.microdoppler import compare_window
+    from radar.dsp.vitals import VitalsAnalyzer
+    va = VitalsAnalyzer(fs, wavelength)
+    n, h = int(round(window_s * fs)), max(1, int(round(step_s * fs)))
+    return [compare_window(x[i:i + n], fs, va) for i in range(0, len(x) - n + 1, h)]
+
+
+def _compare_table(groups: dict, labels: dict, true_bpm: dict | None = None) -> None:
+    """groups : nom → [fenêtres] ; labels : nom → 0/1."""
+    neg = [w for k, v in groups.items() if labels[k] == 0 for w in v]
+    print(f"{'enregistrement':34s} lab " + " ".join(f"{d:>13s}" for d in DETECTORS)
+          + "   (SNR médian dB / rythme médian /min)")
+    for k, v in groups.items():
+        cells = []
+        for d in DETECTORS:
+            s = np.median([w[d][0] for w in v])
+            fr = np.nanmedian([w[d][1] for w in v]) * 60
+            cells.append(f"{s:5.1f}/{fr:5.1f}")
+        print(f"{k[:34]:34s} {labels[k]:>3d} " + " ".join(f"{c:>13s}" for c in cells))
+    if neg and any(labels[k] == 1 for k in groups):
+        print("-" * 96)
+        print("AUC de chaque enregistrement positif contre la salle vide "
+              "(détection au seuil « max(vide) + 1 dB ») :")
+        print(f"{'':34s}     " + " ".join(f"{d:>13s}" for d in DETECTORS))
+        for k, v in groups.items():
+            if labels[k] != 1:
+                continue
+            cells = []
+            for d in DETECTORS:
+                s0 = np.array([w[d][0] for w in neg])
+                s1 = np.array([w[d][0] for w in v])
+                auc = roc_auc(np.r_[np.ones(len(s1)), np.zeros(len(s0))], np.r_[s1, s0])
+                cells.append(f"{auc:.2f} ({100 * np.mean(s1 >= s0.max() + 1.0):3.0f}%)")
+            print(f"{k[:34]:34s}     " + " ".join(f"{c:>13s}" for c in cells))
+        print("  " + " ; ".join(f"{d} = {n}" for d, n in DETECTORS.items()))
+
+
+def compare_recordings(paths: list[Path], cfg: Config) -> None:
+    groups, labels = {}, {}
+    for p in paths:
+        try:
+            rec = load_recording(p)
+        except Exception:
+            continue
+        if rec.label not in (0, 1) or rec.duration_s < 25:
+            continue
+        fc = (rec.meta.get("config") or {}).get("sdr", {}).get("f_c", cfg.sdr.f_c)
+        groups[p.stem] = _compare_seq(rec.slow, rec.fs_slow, 299_792_458.0 / fc)
+        labels[p.stem] = rec.label
+    if not groups:
+        print("Aucun enregistrement exploitable.")
+        return
+    _compare_table(groups, labels)
+
+
+def compare_simulation(carriers_hz=(1.8e9, 5.8e9, 24e9, 60e9), snr_db: float = 10.0,
+                       depth_mm: float = 5.0, n: int = 3, seed: int = 0) -> None:
+    from radar.sources.simulation import simulate_slow
+    fs = 50.0
+    print(f"Simulation : respiration 15/min, {depth_mm:g} mm crête à crête, SNR {snr_db:g} dB, "
+          f"dérive LO 0.003 rad ; H0 = salle vide")
+    print(f"{'porteuse':>9s} {'β':>5s}  " + "  ".join(f"AUC {d}" for d in DETECTORS)
+          + "  |  " + "  ".join(f"rythme {d}" for d in DETECTORS))
+    for fc in carriers_hz:
+        lam = 299_792_458.0 / fc
+        rng = np.random.default_rng(seed + int(fc / 1e8))
+        h1, h0 = [], []
+        for _ in range(n):
+            x, _ = simulate_slow("breathing", 60, fs, lam, rng, snr_db=snr_db, breath_rate_bpm=15,
+                                 breath_depth_mm=depth_mm, lo_drift_rad=0.003)
+            h1 += _compare_seq(x, fs, lam, step_s=2.0)
+            x, _ = simulate_slow("empty", 60, fs, lam, rng, snr_db=snr_db, lo_drift_rad=0.003)
+            h0 += _compare_seq(x, fs, lam, step_s=2.0)
+        aucs, oks = [], []
+        for d in DETECTORS:
+            s1 = np.array([w[d][0] for w in h1])
+            s0 = np.array([w[d][0] for w in h0])
+            aucs.append(roc_auc(np.r_[np.ones(len(s1)), np.zeros(len(s0))], np.r_[s1, s0]))
+            fr = np.array([w[d][1] for w in h1]) * 60
+            oks.append(float(np.mean(np.abs(fr - 15) < 2)))
+        beta = 4 * np.pi * depth_mm * 1e-3 / 2 / lam
+        print(f"{fc / 1e9:6.1f} GHz {beta:5.1f}  " + "  ".join(f"{a:6.2f}" for a in aucs)
+              + "  |  " + "  ".join(f"{100 * o:8.0f}%" for o in oks))

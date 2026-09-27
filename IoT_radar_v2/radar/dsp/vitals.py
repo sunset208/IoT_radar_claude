@@ -54,6 +54,8 @@ class Features:
     static_dbfs: float = -200.0
     noise_dbfs: float = -200.0
     drift_db: float = 0.0          # plancher tangentiel/radial à 0.1–0.3 Hz (dérive LO)
+    md_snr_db: float | None = None  # périodicité du centroïde micro-Doppler (fenêtre longue)
+    doppler_vrms_cms: float | None = None   # vitesse radiale rms (centroïde Doppler)
 
     @property
     def breath_bpm(self) -> float | None:
@@ -344,6 +346,16 @@ class VitalsAnalyzer:
         if k >= 4:
             e = np.mean(np.abs(xh[: k * seg].reshape(k, seg)) ** 2, axis=1)
             feats.motion = float(np.max(e) / max(np.median(e), 1e-30))
+
+        # --- micro-Doppler (fenêtre longue seulement) : pour l'analyse et l'IA ;
+        # la détection reste sur la phase (rapport §9.11 : à 1.8 GHz la
+        # respiration ne décale le spectre que de ~0.05 Hz, non résolu)
+        if full:
+            from radar.dsp.microdoppler import md_breath
+            r = md_breath(x, fs)
+            feats.md_snr_db = float(r["snr_db"])
+            if "centroid" in r:
+                feats.doppler_vrms_cms = float(np.sqrt(np.mean(r["centroid"] ** 2)) * self.lam / 2 * 100)
 
         # --- amplitude & cœur (si déplacement en mm disponible) -----------
         if disp is not None:

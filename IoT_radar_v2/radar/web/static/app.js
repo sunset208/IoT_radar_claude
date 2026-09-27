@@ -33,6 +33,9 @@ let fast = null;
 let gaugeVals = { pres: -5, act: -5 };
 let last = null;        // dernier snapshot d'analyse
 let extras = {};
+let mdCols = [];        // colonnes micro-Doppler (dB / bruit thermique), 10 Hz
+let mdF = null;         // fréquences Doppler (Hz, signées)
+let mdDirty = false;
 
 // ---------------------------------------------------------------- canvas utils
 function setup(cv) {
@@ -138,8 +141,27 @@ function setGauge(el, v, thr, on, lo = -5, hi = 30) {
   el.classList.toggle("on", !!on);
 }
 
+function drawMicroDoppler() {
+  const { g, W, H } = setup($("c-md"));
+  if (!mdCols.length || !mdF) return;
+  const L = 38, R = 66, T = 6, B = 18, pw = W - L - R, ph = H - T - B;
+  const n = Math.ceil(WAVE_S * 10);
+  const cols = mdCols.length >= n ? mdCols.slice(-n) : Array(n - mdCols.length).fill(null).concat(mdCols);
+  heatmap(g, cols.map((c) => c || new Array(mdF.length).fill(-10)), L, T, pw, ph, 0, 40);
+  const fmax = mdF[mdF.length - 1], lam = cfg.wavelength || 0.1666;
+  g.fillStyle = css("--muted");
+  for (let i = -2; i <= 2; i++) {
+    const f = fmax * i / 2, y = T + ph / 2 - (ph / 2) * i / 2;
+    g.textAlign = "right"; g.fillText(f.toFixed(0) + " Hz", L - 2, y + 4);
+    g.textAlign = "left"; g.fillText((100 * f * lam / 2).toFixed(0) + " cm/s", L + pw + 4, y + 4);
+  }
+  g.strokeStyle = css("--grid"); g.beginPath(); g.moveTo(L, T + ph / 2); g.lineTo(L + pw, T + ph / 2); g.stroke();
+  g.textAlign = "center"; g.fillText(`← ${WAVE_S} s`, L + 24, H - 4); g.fillText("maintenant", L + pw - 30, H - 4);
+}
+
 function animate() {
   drawWave();
+  if (mdDirty) { drawMicroDoppler(); mdDirty = false; }
   if (fast) {
     // lissage exponentiel entre deux ticks (10 Hz) → jauges fluides
     gaugeVals.pres += 0.35 * (fast.presence_db - gaugeVals.pres);
@@ -282,6 +304,7 @@ function setHealth(snap) {
   if (fast) rows.push(["Présence rad. / tang.", `${fast.presence_r_db.toFixed(1)} / ${fast.presence_t_db.toFixed(1)} dB`]);
   if (f.motion !== undefined) rows.push(["Indice de mouvement (20 s)", `<span class="${f.motion >= thresholds.motion ? "warn" : ""}">${f.motion.toFixed(1)}</span>`]);
   if (f.periodicity !== undefined) rows.push(["Périodicité (conc./ACF)", `${f.concentration.toFixed(2)} / ${f.acf.toFixed(2)}`]);
+  if (f.md_snr_db !== undefined && f.md_snr_db !== null) rows.push(["Micro-Doppler : SNR / vitesse rms", `${f.md_snr_db.toFixed(1)} dB / ${f.doppler_vrms_cms.toFixed(1)} cm/s`]);
   if (st.queue !== undefined) rows.push(["File RX / pertes", `<span class="${(st.dropped || st.suspect_overflows) ? "bad" : "good"}">${st.queue} / ${st.dropped} (+${st.suspect_overflows} susp.)</span>`]);
   rows.push(["Calcul par analyse", (st.proc_ms || 0).toFixed(1) + " ms"]);
   if (snap.ml_score !== null && snap.ml_score !== undefined) rows.push(["Score IA", (100 * snap.ml_score).toFixed(0) + " %"]);
@@ -454,6 +477,7 @@ function onFast(f) {
   }
   waveScale = sc;   // toute la bande est remise à l'échelle d'un bloc : pas de saut
   if (!last || last.status !== "error") setState(f.state);
+  if (f.md) { mdCols.push(f.md); if (mdCols.length > 400) mdCols.splice(0, mdCols.length - 400); mdDirty = true; }
 }
 
 function onWave(samples, endT) {
@@ -476,6 +500,7 @@ function connect() {
       hist = m.history || []; wf = m.waterfall || []; wfF = m.waterfall_f;
       cfg = { ...cfg, ...(m.config || {}) };
       wave = []; waveEndT = null; fast = null;
+      mdCols = m.md_cols || []; mdF = m.md_f; mdDirty = true;
       setSource(m.snapshot, m.scenarios);
       onFast(m.fast);
       onWave(m.wave, m.wave_end_t);
@@ -507,6 +532,6 @@ $("rec-btn").onclick = async () => {
 document.querySelectorAll(".annots button").forEach((b) => b.onclick = () => post("/api/annotate", { text: b.dataset.a }));
 $("sfcw-bg").onclick = () => post("/api/sfcw/background");
 $("scen").onchange = async (e) => { hist = []; wf = []; await post("/api/scenario", { scenario: e.target.value }); };
-window.addEventListener("resize", () => { requestAnimationFrame(renderAnalysis); if (extras) setExtras(extras); });
+window.addEventListener("resize", () => { requestAnimationFrame(renderAnalysis); if (extras) setExtras(extras); mdDirty = true; });
 connect();
 requestAnimationFrame(animate);

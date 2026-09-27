@@ -137,6 +137,8 @@ def create_app(state: AppState) -> FastAPI:
             "waterfall_f": eng.waterfall_f,
             "wave": _safe_list(eng.wave),
             "wave_end_t": eng.wave_end_t,
+            "md_cols": _safe_list(eng.md_cols),
+            "md_f": (None if eng.proc.fast is None else eng.proc.fast.md_f.round(3).tolist()),
             "scenarios": state.scenarios,
             "extras": state.extras_state(),
             "config": {
@@ -145,6 +147,7 @@ def create_app(state: AppState) -> FastAPI:
                 "hop_s": eng.cfg.analysis.hop_s,
                 "breath_band": eng.cfg.analysis.breath_band,
                 "f_c": eng.cfg.sdr.f_c,
+                "wavelength": eng.cfg.sdr.wavelength,
             },
         })
 

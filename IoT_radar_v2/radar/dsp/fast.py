@@ -61,6 +61,11 @@ class FastParams:
     # la voie tangentielle porte la dérive LO (1/f², non stationnaire) : son
     # plancher est le moins sûr, on lui impose une marge supplémentaire
     tan_margin_db: float = 4.0
+    # spectrogramme micro-Doppler (affichage) : FFT des md_window_s dernières
+    # secondes du signal sans clutter, à chaque tick
+    md_window_s: float = 2.0
+    md_fmax: float = 12.5
+    md_nfft: int = 128
 
 
 @dc.dataclass
@@ -75,6 +80,7 @@ class FastTick:
     wave_dt: float
     wave_scale_mm: float | None       # mm par µFS si le rayon du cercle IQ est connu
     raw: tuple = ()                   # (E_r, E_t, N_r, N_t, |C|²) — pour la calibration
+    md_db: np.ndarray | None = None   # colonne micro-Doppler (dB / bruit thermique), fréquences md_f
 
     def to_dict(self) -> dict:
         return {"t": self.t, "activity_db": self.activity_db, "presence_db": self.presence_db,
@@ -115,6 +121,13 @@ class FastMonitor:
         self.n_upd = max(1, int(round(p.update_s * fs)))
         self.n_floor = max(1, int(round(1.0 * fs)))     # plancher : moyennes sur 1 s
         self.wave_dec = max(1, int(round(fs / 10.0)))
+        self.n_md = max(8, int(round(p.md_window_s * fs)))
+        self._md_win = signal.windows.hann(self.n_md, sym=False)
+        nf = max(p.md_nfft, self.n_md)
+        f = np.fft.fftshift(np.fft.fftfreq(nf, 1.0 / fs))
+        self._md_sel = np.abs(f) <= min(p.md_fmax, 0.5 * fs)
+        self.md_f = f[self._md_sel]
+        self._md_nfft = nf
         self.floor_bias = self._pct_bias(self._sos_n, self.n_floor)
         self.tan_bias = self._pct_bias(self._sos_p, self.n_pres)
         self.reset()
@@ -157,6 +170,7 @@ class FastMonitor:
         self._wave_buf: list[float] = []
         self._wave_phase = 0
         self._c_abs2 = 0.0
+        self._zbuf = collections.deque(maxlen=self.n_md)
 
     # ------------------------------------------------------------------
     def _filters(self, z: np.ndarray):
@@ -192,6 +206,7 @@ class FastMonitor:
             self._pa.append(abs(za[i]) ** 2)
             self._nr.append(zn[i].real ** 2)
             self._nt.append(zn[i].imag ** 2)
+            self._zbuf.append(z[i])
             # axe principal (covariance exponentielle de la bande de présence)
             v = np.array([zp[i].real, zp[i].imag])
             self._cov += a * (np.outer(v, v) - self._cov)
@@ -232,6 +247,7 @@ class FastMonitor:
         pa = list(self._pa)[-self.n_act:]
         Er, Et = float(np.mean(pr)), float(np.mean(pt))
         self._et_hist.append(Et)
+        md_db = self._md_column((Nr + Nt) * self.fs * 0.5)
         E0r = Nr * self.enbw_p + self.k_amp * self._c_abs2
         E0t = Nt * self.enbw_p + self.k_phase * self._c_abs2
         # Voie tangentielle : la dérive de phase LO varie (température, montage).
@@ -247,7 +263,19 @@ class FastMonitor:
                         presence_r_db=db(rr), presence_t_db=db(rt),
                         noise_dbfs=db((Nr + Nt) * self.fs * 0.5),
                         wave=wave, wave_dt=self.wave_dec / self.fs, wave_scale_mm=scale,
-                        raw=(Er, Et, Nr, Nt, self._c_abs2))
+                        raw=(Er, Et, Nr, Nt, self._c_abs2), md_db=md_db)
+
+    def _md_column(self, noise_var: float) -> np.ndarray | None:
+        """|FFT|² fenêtrée des md_window_s dernières secondes / bruit thermique (dB).
+
+        Fréquence > 0 : la cible se rapproche (la phase −4πd/λ croît) ;
+        vitesse radiale v = f_D·λ/2."""
+        if len(self._zbuf) < self.n_md or noise_var <= 0:
+            return None
+        zz = np.asarray(self._zbuf) * self._md_win
+        X = np.fft.fftshift(np.fft.fft(zz, n=self._md_nfft))
+        P = np.abs(X[self._md_sel]) ** 2 / float(np.sum(self._md_win ** 2))
+        return 10 * np.log10(P / noise_var + 1e-3)
 
     # ------------------------------------------------------------------
     @property

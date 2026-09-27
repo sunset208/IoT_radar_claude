@@ -543,3 +543,60 @@ plusieurs séances réelles (≥ 3 sessions « vide » et ≥ 3 sessions
    en sachant que les antennes d'origine sont inadaptées à 5.8 GHz.
 7. Commande d'antennes : 2 × LP0965, puis refaire les étapes 2 à 4 avec
    20–50 cm d'écart et un écran entre les deux antennes.
+
+### 9.11 Phase ou micro-Doppler ?
+
+**Ce que fait le détecteur.**  Il utilise la **phase**, linéarisée : le signal
+complexe est projeté sur les axes radial et tangentiel au clutter, ce qui,
+pour de petits mouvements, est proportionnel au déplacement du thorax ; la
+respiration est une raie dans le spectre de ce déplacement.  La vraie
+démodulation de phase (arc-tangente) ne sert qu'à l'amplitude en mm.  Le
+micro-Doppler ne servait qu'aux mouvements (indice d'activité 1.5–15 Hz,
+bouffées > 3 Hz).
+
+**Physique.**  Le Doppler est la dérivée de la phase, f_D = (1/2π)·dφ/dt :
+même information, autre traitement.  La respiration module la phase avec un
+indice β = 4π·A/λ (A = amplitude crête).  Pour 5 mm crête à crête à 1.8 GHz,
+β ≈ 0.2 rad et la vitesse maximale du thorax (~4 mm/s) décale le spectre de
+**~0.05 Hz**, bien moins que le rythme lui-même : le spectre est une raie
+centrale + deux raies à ±f_resp, qu'aucune analyse temps-fréquence ne peut
+lire comme une vitesse.  Le micro-Doppler ne devient une signature lisible
+que pour β ≳ 1 : gros mouvements, marche — ou porteuse élevée (β ≈ 6 à
+60 GHz, d'où son usage par les modules 60 GHz).
+
+**Essai des deux** (`radar compare`, mêmes fenêtres de 20 s, même plancher
+CFAR en anneau) : A1 phase linéarisée (en service), A2 vraie phase
+(arc-tangente), B1 micro-Doppler (périodicité du centroïde du spectrogramme,
+trames de 2 s), B2 Doppler instantané dφ/dt.
+
+*Enregistrements réels (1.8 GHz), AUC contre la salle vide et détection au seuil
+« max(vide) + 1 dB » :*
+
+| enregistrement | A1 phase linéarisée | A2 vraie phase | B1 micro-Doppler | B2 dφ/dt |
+|---|---|---|---|---|
+| respiration cadencée 15/min | **1.00 (92 %)** | 0.81 (34 %) | 0.73 (14 %) | 0.79 (47 %) |
+| `resp_chambre` (spontanée) | **1.00 (94 %)** | 0.38 (0 %) | 0.63 (9 %) | 0.46 (1 %) |
+| sujet qui bouge (test2) | 0.49 | 0.31 | 0.66 | 0.13 |
+
+Le micro-Doppler réagit un peu quand le sujet **bouge**, avec des « rythmes »
+de 30–40 /min : il détecte le mouvement, pas la respiration.  La vraie phase
+perd face à la phase linéarisée parce qu'elle subit toute la dérive du LO,
+alors que A1 s'appuie sur la voie radiale qui y est insensible (§9.2).
+
+*Simulation (5 mm crête à crête, SNR 10 dB) — AUC / rythme correct à ±2 /min :*
+
+| porteuse | β | A1 | A2 | B1 micro-Doppler |
+|---|---|---|---|---|
+| 1.8 GHz | 0.2 | **1.00 / 98 %** | 0.64 / 3 % | 0.46 / 6 % |
+| 5.8 GHz | 0.6 | **1.00 / 98 %** | 0.76 / 57 % | 0.58 / 52 % |
+| 24 GHz | 2.5 | 1.00 / 95 % | 1.00 / 94 % | 1.00 / 95 % |
+| 60 GHz | 6.3 | 0.97 / 16 % | **1.00 / 84 %** | **1.00 / 84 %** |
+
+**Conclusion.**  À 1.8 et 5.8 GHz, la phase linéarisée est de loin la
+meilleure : le détecteur ne change pas.  Le micro-Doppler sert à
+**caractériser les mouvements** (marche, gestes, s'approche / s'éloigne) : il
+est maintenant affiché en direct (spectrogramme signé ±12.5 Hz sur 30 s, axe
+en cm/s), et le SNR du centroïde et la vitesse radiale rms sont enregistrés
+dans les features (analyse, IA).  Au-delà de β ≈ 1, il faudrait basculer sur la
+vraie phase ou le micro-Doppler ; `radar compare` refait l'essai sur de
+nouveaux enregistrements (à 5.8 GHz par exemple).

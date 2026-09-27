@@ -8,6 +8,7 @@ check       diagnostic matériel (niveaux, fuite, stabilité de phase, débit)
 scan        balayage de fréquences : bruit ambiant (et fuite TX→RX avec --tx)
 sfcw        mode à fréquence balayée : run | bench | record | analyze
 protocole   séance d'enregistrement guidée (plans dans protocols/)
+compare     phase ou micro-Doppler ? comparaison des détecteurs (fichiers ou simulation)
 evaluate    métriques du détecteur sur enregistrements ou scénarios simulés
 calibrate   seuils (et régression logistique) à partir d'enregistrements étiquetés
 convert-v1  conversion des .iq de la v1 vers le format v2
@@ -331,6 +332,17 @@ def cmd_protocole(args) -> int:
     return run_protocol(cfg, args)
 
 
+def cmd_compare(args) -> int:
+    from radar.offline import compare_recordings, compare_simulation, find_recordings
+    cfg = load_config(args.config, _overrides(args))
+    logging.basicConfig(level=logging.WARNING)
+    if args.sim:
+        compare_simulation(tuple(args.carriers), snr_db=args.snr, depth_mm=args.depth)
+    else:
+        compare_recordings(find_recordings(args.paths or [str(resolve_path(cfg.recording.dir))]), cfg)
+    return 0
+
+
 def cmd_scan(args) -> int:
     from radar.hwcheck import run_scan
     cfg = load_config(args.config, _overrides(args))
@@ -413,6 +425,15 @@ def main(argv=None) -> int:
                     help="enchaîner sans attendre Entrée, avec N s de compte à rebours")
     pr.add_argument("--out", help="dossier des enregistrements")
     pr.set_defaults(fn=cmd_protocole)
+
+    co = sub.add_parser("compare", help="phase ou micro-Doppler : comparaison des détecteurs")
+    common(co)
+    co.add_argument("paths", nargs="*", help="enregistrements (défaut : data/recordings)")
+    co.add_argument("--sim", action="store_true", help="simulation à plusieurs porteuses")
+    co.add_argument("--carriers", type=float, nargs="+", default=[1.8e9, 5.8e9, 24e9, 60e9])
+    co.add_argument("--snr", type=float, default=10.0)
+    co.add_argument("--depth", type=float, default=5.0, help="amplitude respiratoire crête à crête (mm)")
+    co.set_defaults(fn=cmd_compare)
 
     sf = sub.add_parser("sfcw", help="mode à fréquence balayée (amplitude seule)")
     common(sf)

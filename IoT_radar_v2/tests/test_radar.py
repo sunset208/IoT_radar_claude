@@ -283,3 +283,37 @@ def test_protocol_plans_are_valid():
         name, steps = load_plan(str(p))
         assert steps and all(s.label in (-1, 0, 1) and s.duration_s > 0 for s in steps)
         assert any(s.label == 0 for s in steps)          # chaque plan contient de la salle vide
+
+
+# ---------------------------------------------------------------- micro-Doppler
+def test_microdoppler_sign_and_regimes():
+    """Cible qui se rapproche → Doppler positif ; respiration à 1.8 GHz : Doppler
+    non résolu (la phase linéarisée détecte, le micro-Doppler non) ; à 60 GHz :
+    le micro-Doppler retrouve le rythme."""
+    from radar.dsp import microdoppler as md
+    fs, lam = 50.0, 299_792_458.0 / 1.8e9
+    t = np.arange(0, 10, 1 / fs)
+    x = 0.3 + 0.003 * np.exp(1j * 4 * np.pi / lam * 0.10 * t)          # 10 cm/s vers le radar
+    tt, f, S = md.spectrogram(md.remove_clutter(x, fs), fs)
+    c, _ = md.centroid_spread(S, f)
+    assert abs(np.median(c) - 2 * 0.10 / lam) < 0.3                      # +1.2 Hz
+    rng = np.random.default_rng(2)
+    x, _ = simulate_slow("breathing", 30, fs, lam, rng, snr_db=15, breath_rate_bpm=15, breath_depth_mm=5)
+    va = VitalsAnalyzer(fs, lam)
+    f1, _ = va.analyze(x[:1000], want_display=False)
+    r = md.md_breath(x[:1000], fs)
+    assert f1.snr_db > 12 and abs(f1.breath_bpm - 15) < 2
+    assert r["snr_db"] < f1.snr_db                                       # à 1.8 GHz la phase l'emporte
+    lam60 = 299_792_458.0 / 60e9
+    x, _ = simulate_slow("breathing", 30, fs, lam60, rng, snr_db=15, breath_rate_bpm=15, breath_depth_mm=5)
+    r = md.md_breath(x[:1000], fs)
+    assert abs(r["rate_hz"] * 60 - 15) < 2.5
+
+
+def test_compare_command_on_real_recordings(capsys):
+    from radar.offline import compare_recordings
+    from radar.config import load_config
+    rec = Path(__file__).parent / "data" / "real_pluto_paced15_1800MHz.npz"
+    compare_recordings([rec], load_config(overrides={"sdr": {"f_c": 1.8e9}}))
+    out = capsys.readouterr().out
+    assert "A1" in out and "B1" in out

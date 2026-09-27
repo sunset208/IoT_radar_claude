@@ -186,6 +186,7 @@ class Engine:
         self.waterfall: collections.deque = collections.deque(maxlen=self.WATERFALL_COLS)
         self.waterfall_f: list[float] | None = None
         self.wave: collections.deque = collections.deque(maxlen=int(self.WAVE_S * 10))
+        self.md_cols: collections.deque = collections.deque(maxlen=int(self.WAVE_S * 10))
         self.wave_count = 0          # échantillons de forme d'onde produits depuis le début
         self.wave_end_t = 0.0        # instant (signal) du dernier échantillon
         self.hist_count = 0
@@ -322,6 +323,10 @@ class Engine:
             "wave_dt": tick.wave_dt,
             "wave_scale_mm": None if tick.wave_scale_mm is None else float(f"{tick.wave_scale_mm:.4g}"),
         }
+        if tick.md_db is not None:
+            col = np.round(tick.md_db, 1).tolist()
+            self.md_cols.append(col)
+            self.fast["md"] = col
         self._emit({"fast": self.fast})
 
     def _on_analysis(self, res: AnalysisResult, t_a: float) -> None:

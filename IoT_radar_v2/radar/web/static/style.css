@@ -58,6 +58,7 @@ canvas.short { height: 110px; }
 @media (max-width: 900px) { .sfcw-grid { grid-template-columns: 1fr; } }
 #c-rt { height: 220px; } #c-prof { height: 220px; }
 #c-wf { height: 160px; }
+#c-md { height: 170px; }
 #c-hist { height: 150px; }
 
 .status { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(260px, 1fr) 2fr;

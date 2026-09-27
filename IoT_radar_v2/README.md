@@ -31,6 +31,8 @@ radar.bat record --label 0 --duration 120 --tag salleB_vide
 radar.bat evaluate data\recordings         :: métriques (1re alerte, latence, fausses alarmes…)
 radar.bat evaluate --sim 5                 :: … sur des scénarios simulés
 radar.bat calibrate data\recordings --out calibration\x.json
+radar.bat compare data\recordings          :: phase ou micro-Doppler ? (4 détecteurs comparés)
+radar.bat compare --sim                    :: … en simulation, de 1.8 à 60 GHz
 radar.bat convert-v1 ..\IoT_radar-main\IoT_radar-main\AICalibration\data
 
 :: --- séances guidées (données étiquetées propres) -------------------------
@@ -63,7 +65,8 @@ Pluto RX 1 MS/s ─► NCO −10 kHz ─► CIC² ÷100 ─► IIR ellip. ÷10÷
    indices rapides : présence 0.12–1 Hz / 4 s,                 fenêtres 8, 12 et 20 s : voies radiale /
    activité 1.5–15 Hz / 1 s, normalisés par le                 tangentielle au clutter, périodogramme / plancher
    bruit attendu en salle vide (thermique +                    CFAR en anneau, SNR du pic, périodicité,
-   bruit multiplicatif de la fuite)                            bouffées > 3 Hz, arc-tangente → mm
+   bruit multiplicatif de la fuite) ;                          bouffées > 3 Hz, arc-tangente → mm,
+   spectrogramme micro-Doppler signé (affichage)               micro-Doppler (features)
              └──────────────────────────► détecteur (hystérésis à 2 cadences) ◄─────────┘
          → VIDE / PRÉSENCE (signe de vie, ~5 s) / MOUVEMENT / RESPIRATION (+ rythme, mm, cœur exp.)
 ```
@@ -78,6 +81,7 @@ radar/
   dsp/fast.py          indices rapides 10 Hz (présence, activité) + forme d'onde causale
   dsp/vitals.py        analyse d'une fenêtre : spectre 2 voies, features, amplitude, cœur
   dsp/detector.py      états + hystérésis à deux cadences, multi-échelle, calibration
+  dsp/microdoppler.py  spectrogramme signé, centroïde / vitesse, comparaison phase vs micro-Doppler
   pipeline.py          Processor (logique pure, partagée temps réel / hors ligne) + Engine (thread)
   sources/             Pluto (thread RX, pertes, plage LO), simulation RF / slow-time, relecture
   sfcw/                mode SFCW : dsp (distance × temps), sources (Pluto, sim, relecture),
