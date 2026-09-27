@@ -76,7 +76,17 @@ def stability_report(slow: np.ndarray, fs: float, wavelength: float) -> dict:
     band = (f >= 0.1) & (f <= 0.8)
     ph_rms_band = math.sqrt(float(np.trapezoid(P[band], f[band]))) if np.any(band) else float("nan")
     disp_um = ph_rms_band * wavelength / (4 * math.pi) * 1e6
+    # constantes de bruit multiplicatif de la fuite, telles que les utilise
+    # l'indice de présence (radar/dsp/fast.py : même filtre 0.12–1 Hz)
+    from radar.dsp.fast import FastMonitor
+    sos = FastMonitor(fs)._sos_p
+    z = (slow - c) * np.conj(c / abs(c)) / abs(c)
+    zf = signal.sosfilt(sos, z)[int(10 * fs):] if len(z) > 20 * fs else signal.sosfilt(sos, z)
+    amp_dbc = 10 * math.log10(float(np.mean(zf.real ** 2)) + 1e-30)
+    ph_dbc = 10 * math.log10(float(np.mean(zf.imag ** 2)) + 1e-30)
     return {
+        "clutter_amp_dbc": amp_dbc,
+        "clutter_phase_dbc": ph_dbc,
         "static_dbfs": 20 * math.log10(abs(c) + 1e-15),
         "phase_pp_mrad": 1e3 * float(np.ptp(ph)),
         "phase_rms_band_mrad": 1e3 * ph_rms_band,
@@ -92,6 +102,9 @@ def _print_stability(r: dict) -> None:
     _p(f"  bruit de phase 0.1–0.8 Hz : {r['phase_rms_band_mrad']:.2f} mrad rms"
        f"  ≈ {r['disp_noise_band_um']:.1f} µm de déplacement équivalent")
     _p(f"  stabilité d'amplitude  : {r['amp_rel_std_pct']:.2f} %")
+    _p(f"  bruit de la fuite (bande 0.12–1 Hz) : amplitude {r['clutter_amp_dbc']:.1f} dBc, "
+       f"phase {r['clutter_phase_dbc']:.1f} dBc  (27/09, antennes à 2 cm : −84.7 / −65.3 dBc)")
+    _p("    → valeurs de fast.clutter_amp_dbc / clutter_phase_dbc ; `radar calibrate` les mesure aussi")
     # Le bruit de phase porte sur le clutter statique (fuite + murs).  Pour une
     # cible N dB plus faible que ce clutter, le bruit équivalent en déplacement
     # est multiplié par 10^(N/20) : c'est ce chiffre qui compte.

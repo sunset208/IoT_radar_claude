@@ -510,6 +510,18 @@ points :
    modèle serve après le passage à 5.8 GHz.
 3. **Données réelles** : les enregistrements SFCW sont ignorés proprement, et
    le rythme du module 60 GHz sert de vérité terrain.
+4. **Sélection du modèle** : en pré-entraînement, elle se faisait sur la
+   validation réelle dès qu'elle existait. Or le tirage par session actuel
+   (`live_test1`, `live_test2`) n'y met **que des positifs**, donc l'AUC vaut
+   NaN, et **aucun `best.pt` n'était jamais écrit**. La sélection se fait
+   maintenant sur la validation synthétique en pré-entraînement.
+
+Vérification ici, sur CPU : un pré-entraînement de 250 pas (100 s) atteint
+une AUC synthétique de 0.66 et écrit bien `best.pt` ; `finetune --check`
+passe. C'est une simple validation de la chaîne ; le vrai pré-entraînement
+(30 000 pas) est à lancer sur la 5090. Les métriques réelles resteront
+indéfinies tant que la validation ne contiendra pas de session « vide » :
+d'où l'importance de `radar protocole`.
 
 Le pré-entraînement sur simulateur est pertinent et peu coûteux (quelques
 dizaines de minutes sur la 5090). Mais un affinage n'aura de sens qu'avec

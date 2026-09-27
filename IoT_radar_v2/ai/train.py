@@ -129,6 +129,16 @@ def classical_baseline(ds: RecordingWindows, idx: list[int], cfg_radar, pfa: flo
     return {"auc": roc_auc(y, s), "pd_at_pfa": pd}
 
 
+def _nan_to_none(o):
+    if isinstance(o, dict):
+        return {k: _nan_to_none(v) for k, v in o.items()}
+    if isinstance(o, (list, tuple)):
+        return [_nan_to_none(v) for v in o]
+    if isinstance(o, float) and not math.isfinite(o):
+        return None
+    return o
+
+
 def loss_fn(logit, rate, y, rt, cfg) -> torch.Tensor:
     ls = cfg["loss"].get("label_smoothing", 0.0)
     y_s = y * (1 - ls) + 0.5 * ls
@@ -292,6 +302,7 @@ def main() -> int:
         from radar.config import load_config
         report["classical_baseline_real_val"] = classical_baseline(
             real_val.dataset, list(real_val.indices), load_config(), tr["pfa_target"])
+    report = _nan_to_none(report)          # JSON strict (pas de NaN)
     with open(out / "report.json", "w", encoding="utf-8") as fh:
         json.dump(report, fh, indent=2, ensure_ascii=False, default=float)
     print(json.dumps(report, indent=2, ensure_ascii=False, default=float))
